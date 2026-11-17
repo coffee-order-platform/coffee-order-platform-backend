@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: ko-KR
+
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!**/build/**"
+    - "!**/.gradle/**"
+    - "!gradle/wrapper/**"
+  path_instructions:
+    - path: "src/main/**"
+      instructions: >
+        Spring Boot 4 / Java 21 코드다. 입력 검증 누락, 트랜잭션 경계,
+        N+1 쿼리, 비밀번호·키의 하드코딩을 우선 확인한다.
+    - path: "src/test/**"
+      instructions: >
+        실패 경로와 경계값을 검증하는지 확인한다. 성공 케이스만 있으면 지적한다.
+    - path: "**/application*.yml"
+      instructions: >
+        비밀값은 ${ENV_VAR} 참조만 허용한다. 실제 값이 들어 있으면 지적한다.
