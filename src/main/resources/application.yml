@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: coffee-order
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:mysql://localhost:${DB_PORT:3306}/${DB_NAME:coffee_order}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME:coffee}
+    password: ${DB_PASSWORD}
+  data:
+    redis:
+      host: localhost
+      port: ${REDIS_PORT:6379}
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true

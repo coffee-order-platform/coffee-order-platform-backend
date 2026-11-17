@@ -1,0 +1,47 @@
+# 환경변수 / 비밀 (실제 값이 든 파일은 절대 올리지 않는다)
+.env
+.env.*
+application-local.yml
+application-local.properties
+application-secret*.yml
+*.pem
+*.key
+*.p12
+*.jks
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# VS Code / Java (공유용 설정·추천 확장만 올린다)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+bin/
+out/
+.classpath
+.project
+.settings/
+.factorypath
+
+# IntelliJ
+.idea/
+*.iml
+
+# 로그 / 크래시 덤프
+*.log
+logs/
+hs_err_pid*
+
+# Docker 로컬 데이터
+docker-data/
+mysql-data/
+redis-data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 작업 가이드 문서
+/커피숍 주문 시스템 작업 가이드 (10일 알바).pdf
