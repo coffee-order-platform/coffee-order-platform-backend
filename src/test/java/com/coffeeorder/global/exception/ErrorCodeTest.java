@@ -3,6 +3,7 @@ package com.coffeeorder.global.exception;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -34,9 +35,25 @@ class ErrorCodeTest {
     }
 
     @Test
-    void 모든_에러코드는_비어_있지_않은_메시지를_가진다() {
-        assertThat(ErrorCode.values())
-                .allSatisfy(c -> assertThat(c.getMessage()).isNotBlank());
+    void 에러코드_12개의_응답_문구가_고정되어_있다() {
+        Map<ErrorCode, String> expected = new EnumMap<>(ErrorCode.class);
+        expected.put(ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다.");
+        expected.put(ErrorCode.MENU_NOT_FOUND, "메뉴를 찾을 수 없습니다.");
+        expected.put(ErrorCode.CART_ITEM_NOT_FOUND, "장바구니 항목을 찾을 수 없습니다.");
+        expected.put(ErrorCode.INVALID_QUANTITY, "수량이 올바르지 않습니다.");
+        expected.put(ErrorCode.CART_EMPTY, "장바구니가 비어 있습니다.");
+        expected.put(ErrorCode.INSUFFICIENT_POINT, "포인트가 부족합니다.");
+        expected.put(ErrorCode.INVALID_CHARGE_AMOUNT, "충전 금액이 올바르지 않습니다.");
+        expected.put(ErrorCode.NOT_FOUND, "요청한 주소를 찾을 수 없습니다.");
+        expected.put(ErrorCode.METHOD_NOT_ALLOWED, "지원하지 않는 요청 방식입니다.");
+        expected.put(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다.");
+        expected.put(ErrorCode.INVALID_REQUEST, "요청 값이 올바르지 않습니다.");
+        expected.put(ErrorCode.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");
+
+        Map<ErrorCode, String> actual = new EnumMap<>(ErrorCode.class);
+        Arrays.stream(ErrorCode.values()).forEach(c -> actual.put(c, c.getMessage()));
+
+        assertThat(actual).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
     @Test

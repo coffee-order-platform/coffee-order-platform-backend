@@ -112,8 +112,18 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void 지원하지_않는_요청_방식은_METHOD_NOT_ALLOWED() throws Exception {
-        assertError(call(delete("/test/business")), ErrorCode.METHOD_NOT_ALLOWED);
+    void 지원하지_않는_요청_방식은_METHOD_NOT_ALLOWED_이고_Allow_헤더를_유지한다() throws Exception {
+        MockHttpServletResponse response = call(delete("/test/business"));
+
+        assertError(response, ErrorCode.METHOD_NOT_ALLOWED);
+        assertThat(response.getHeader("Allow")).contains("GET");
+    }
+
+    @Test
+    void 로그용_메시지는_줄바꿈이_없는_한_줄로_바뀌고_길이가_제한된다() {
+        assertThat(GlobalExceptionHandler.clean("a\r\nFORGED\tline")).isEqualTo("a FORGED line");
+        assertThat(GlobalExceptionHandler.clean(null)).isEmpty();
+        assertThat(GlobalExceptionHandler.clean("x".repeat(500))).hasSize(203).endsWith("...");
     }
 
     @Test
