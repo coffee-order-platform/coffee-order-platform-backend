@@ -9,7 +9,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
-/** 작업 가이드 PDF 에 확정된 7개 코드의 이름·상태가 바뀌면 실패한다. */
+/** 에러코드 12개(업무 7 + 공통 5)의 이름·HTTP 상태·응답 문구가 바뀌면 실패한다. */
 class ErrorCodeTest {
 
     @Test

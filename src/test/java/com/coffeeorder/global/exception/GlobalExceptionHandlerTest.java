@@ -127,9 +127,11 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void JSON_이_아닌_본문은_UNSUPPORTED_MEDIA_TYPE() throws Exception {
-        assertError(call(post("/test/body").contentType(MediaType.TEXT_PLAIN).content("x")),
-                ErrorCode.UNSUPPORTED_MEDIA_TYPE);
+    void JSON_이_아닌_본문은_UNSUPPORTED_MEDIA_TYPE_이고_Accept_헤더를_유지한다() throws Exception {
+        MockHttpServletResponse response = call(post("/test/body").contentType(MediaType.TEXT_PLAIN).content("x"));
+
+        assertError(response, ErrorCode.UNSUPPORTED_MEDIA_TYPE);
+        assertThat(response.getHeader("Accept")).contains("application/json");
     }
 
     @Test
