@@ -30,6 +30,8 @@ class DatabaseTimeZoneTest {
         TimeZone original = TimeZone.getDefault();
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
         // 드라이버가 접속 시점의 JVM 시간대를 쓰므로, 시간대를 바꾼 뒤 새 연결을 직접 연다.
+        // 주의: 커넥션 풀이 살아 있는 동안 전역 시간대를 잠깐 바꾼다. 이 구간에 풀이 새 연결을 열면 그 연결이
+        // UTC 로 고정될 수 있으나, 병렬 실행이 없고 연결 교체 주기(30분)가 길어 가능성이 매우 낮다.
         try (Connection con = DriverManager.getConnection(
                 env.getRequiredProperty("spring.datasource.url"),
                 env.getRequiredProperty("spring.datasource.username"),
