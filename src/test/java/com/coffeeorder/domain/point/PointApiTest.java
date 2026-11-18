@@ -2,6 +2,7 @@ package com.coffeeorder.domain.point;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
@@ -14,9 +15,16 @@ import com.coffeeorder.domain.point.repository.PointHistoryRepository;
 import com.coffeeorder.domain.point.repository.PointRepository;
 import com.coffeeorder.domain.user.entity.User;
 import com.coffeeorder.domain.user.repository.UserRepository;
+import com.coffeeorder.domain.point.service.PointService;
 import jakarta.persistence.EntityManager;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -56,6 +64,7 @@ class PointApiTest {
     @Autowired OrderRepository orderRepository;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager entityManager;
+    @Autowired DataSource dataSource;
 
     private User user;
     private long missingUserId;
@@ -77,13 +86,13 @@ class PointApiTest {
         assertThat(res.getContentAsString(UTF_8))
                 .isEqualTo("{\"status\":200,\"message\":\"포인트 충전 성공\",\"data\":{\"balance\":151000}}");
         assertThat(balanceInDb()).isEqualTo(151_000L);
-        List<PointHistory> histories = pointHistoryRepository.findAll().stream()
-                .filter(h -> h.getUser().getId().equals(user.getId())).toList();
-        assertThat(histories).hasSize(1);
-        assertThat(histories.get(0).getType()).isEqualTo(PointHistoryType.CHARGE);
-        assertThat(histories.get(0).getAmount()).isEqualTo(1_000L);
-        assertThat(histories.get(0).getBalanceAfter()).isEqualTo(151_000L);
-        assertThat(histories.get(0).getOrder()).isNull();
+        assertThat(historyCount()).isEqualTo(1L);
+        Map<String, Object> row = jdbc.queryForMap(
+                "SELECT type, amount, balance_after, order_id FROM point_histories WHERE user_id = ?", user.getId());
+        assertThat(row.get("type")).isEqualTo("CHARGE");
+        assertThat(((Number) row.get("amount")).longValue()).isEqualTo(1_000L);
+        assertThat(((Number) row.get("balance_after")).longValue()).isEqualTo(151_000L);
+        assertThat(row.get("order_id")).isNull();
     }
 
     @Test
@@ -95,7 +104,8 @@ class PointApiTest {
     }
 
     @ParameterizedTest
-    @ValueSource(longs = {999, 0, -1000, 500_001, 1_500})
+    // 501_000·1_000_000 은 1000원 단위라서 상한 검사만이 막는다(단위 검사에 가려지지 않게)
+    @ValueSource(longs = {999, 0, -1000, 500_001, 501_000, 1_000_000, 1_500})
     void C3_C4_C5_범위_밖이거나_1000원_단위가_아니면_INVALID_CHARGE_AMOUNT_이고_잔액과_내역은_그대로다(long amount)
             throws Exception {
         MockHttpServletResponse res = charge(user.getId(), "{\"amount\":" + amount + "}");
@@ -107,12 +117,39 @@ class PointApiTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"amount\":null}", "{\"amount\":\"abc\"}", "{\"amount\":"})
-    void C6_E4_금액_누락_문자_깨진_JSON은_INVALID_REQUEST(String body) throws Exception {
+    @ValueSource(strings = {
+            "{}", "{\"amount\":null}", "{\"amount\":\"abc\"}", "{\"amount\":",
+            "{\"amount\":1000.5}", "{\"amount\":1000.0}"})
+    void C6_E4_금액_누락_문자_깨진_JSON_소수는_INVALID_REQUEST(String body) throws Exception {
         MockHttpServletResponse res = charge(user.getId(), body);
 
         assertThat(res.getStatus()).isEqualTo(400);
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(INVALID_REQUEST);
+        assertThat(balanceInDb()).isEqualTo(150_000L);
+    }
+
+    @Test
+    void JSON_응답을_받지_않는_충전_요청은_충전하지_않는다() throws Exception {
+        // produces 가 없으면 충전이 먼저 커밋되고 응답 변환에서 실패해 이중 충전 위험이 생긴다
+        MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/points/charge", user.getId())
+                        .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_XML)
+                        .content("{\"amount\":1000}"))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(406);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(
+                "{\"status\":406,\"code\":\"NOT_ACCEPTABLE\",\"message\":\"지원하지 않는 응답 형식입니다.\"}");
+        assertThat(balanceInDb()).isEqualTo(150_000L);
+        assertThat(historyCount()).isZero();
+    }
+
+    @Test
+    void E3_JSON이_아닌_본문은_UNSUPPORTED_MEDIA_TYPE() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/points/charge", user.getId())
+                        .contentType(MediaType.TEXT_PLAIN).content("1000"))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(415);
         assertThat(balanceInDb()).isEqualTo(150_000L);
     }
 
@@ -177,6 +214,43 @@ class PointApiTest {
                 "historyId", "type", "amount", "balanceAfter", "orderId", "createdAt");
         assertThat(first.path("type").asString()).isEqualTo("CHARGE");
         assertThat(first.path("orderId").isNull()).isTrue();
+        // createdAt 은 값이 있고 초 단위 ISO 형식(소수점 없음)이어야 한다
+        assertThat(first.path("createdAt").asString()).matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
+        assertThat(LocalDateTime.parse(first.path("createdAt").asString())).isNotNull();
+    }
+
+    @Test
+    void 충전은_포인트_행을_실제로_잠근다() throws Exception {
+        // 다른 연결에서 커밋된 시드 사용자의 행을 NOWAIT 로 잠가 본다. 충전이 FOR UPDATE 를 걸었다면 즉시 실패한다.
+        // (테스트 트랜잭션은 롤백되므로 시드 잔액은 바뀌지 않는다. flush 전에 확인해야 UPDATE 잠금과 구분된다)
+        Long seedUserId = jdbc.queryForObject(
+                "SELECT u.id FROM users u JOIN points p ON p.user_id = u.id ORDER BY u.id LIMIT 1", Long.class);
+        charge(seedUserId, "{\"amount\":1000}");
+
+        try (Connection other = dataSource.getConnection();
+             PreparedStatement ps = other.prepareStatement(
+                     "SELECT id FROM points WHERE user_id = ? FOR UPDATE NOWAIT")) {
+            other.setAutoCommit(false);
+            ps.setLong(1, seedUserId);
+            assertThatThrownBy(ps::executeQuery).isInstanceOf(SQLException.class);
+            other.rollback();
+        }
+    }
+
+    @Test
+    void 충전_서비스에는_트랜잭션이_걸려_있다() throws Exception {
+        // 이 테스트 클래스는 자체 트랜잭션 안에서 돌아서, 서비스의 @Transactional 이 빠져도 다른 테스트가 알아채지 못한다
+        assertThat(PointService.class.getMethod("charge", Long.class, long.class)
+                        .isAnnotationPresent(org.springframework.transaction.annotation.Transactional.class))
+                .isTrue();
+    }
+
+    @Test
+    void size_1과_100은_허용된다() throws Exception {
+        insertHistories(3);
+
+        assertThat(histories("?size=1").path("data").path("content")).hasSize(1);
+        assertThat(histories("?size=100").path("data").path("content")).hasSize(3);
     }
 
     @Test

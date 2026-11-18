@@ -6,6 +6,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -63,6 +64,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException e) {
         log.warn("지원하지 않는 요청 형식 {}", clean(e.getMessage()));
         return toResponse(ErrorCode.UNSUPPORTED_MEDIA_TYPE, e.getHeaders());
+    }
+
+    /** Accept 가 JSON 을 받지 않는 요청. 응답 본문은 그래도 JSON 으로 쓴다(toResponse). */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ErrorResponse> handleNotAcceptable(HttpMediaTypeNotAcceptableException e) {
+        log.warn("지원하지 않는 응답 형식 {}", clean(e.getMessage()));
+        return toResponse(ErrorCode.NOT_ACCEPTABLE, HttpHeaders.EMPTY);
     }
 
     /** 마지막 안전망. 내부 메시지는 응답에 넣지 않는다. */

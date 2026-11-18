@@ -11,6 +11,10 @@ spring:
     redis:
       host: localhost
       port: ${REDIS_PORT:6379}
+  jackson:
+    deserialization:
+      # 금액·수량 같은 정수 칸에 소수(1000.5)가 오면 잘라 받지 않고 400 INVALID_REQUEST 로 거절한다
+      accept-float-as-int: false
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:update}
