@@ -2,13 +2,18 @@ package com.coffeeorder.domain.cart;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.coffeeorder.domain.user.entity.User;
 import com.coffeeorder.domain.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.OptimisticLockException;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -25,7 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 노션 테스트 케이스 A(담기)·L(조회)·U(수량 변경)·D(삭제)를 실제 MySQL 에서 확인한다.
  * 테스트마다 자기 사용자를 만들고 롤백한다. 메뉴는 시드 메뉴를 이름으로 찾는다(ID 하드코딩 금지).
- * 실제 동시 충돌(X-5, X-6)은 커밋이 필요해 11/20 동시성 테스트에서 다룬다. 재시도 규칙은 CartRetryExecutorTest.
+ * 재시도 규칙은 CartRetryExecutorTest, 컨트롤러 → 재시도 → 409 배선은 CartRetryWiringTest 에서 확인한다.
+ * 실제 스레드 동시 충돌과 서비스 트랜잭션 자체(X-5, X-6)는 커밋이 필요해 11/20 동시성 테스트(D-10)에서 다룬다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -287,24 +293,96 @@ class CartApiTest {
         assertThat(rowCount()).isZero();
     }
 
-    // ---- helpers ----
+    // ---- 사용자 격리 (인증이 없어 userId 조건이 유일한 격리 장치) ----
 
-    private MockHttpServletResponse add(long user, long menu, String quantity) throws Exception {
-        return postJson(user, "{\"menuId\":" + menu + ",\"quantity\":" + quantity + "}");
+    @Test
+    void 같은_메뉴를_두_사용자가_담으면_행이_따로_생긴다() throws Exception {
+        long other = userRepository.saveAndFlush(new User("다른사용자")).getId();
+        add(other, americano, "5");
+        add(userId, americano, "1");
+
+        entityManager.flush();
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM cart_items WHERE menu_id = ? AND user_id IN (?, ?)", Long.class,
+                americano, userId, other)).isEqualTo(2L);
+        assertThat(quantityInDb(americano)).isEqualTo(1);
     }
 
-    private MockHttpServletResponse postJson(long user, String body) throws Exception {
+    @Test
+    void 남의_장바구니_항목은_수정도_삭제도_되지_않는다() throws Exception {
+        long other = userRepository.saveAndFlush(new User("다른사용자")).getId();
+        add(other, americano, "5");
+
+        assertThat(patchJson(userId, americano, "{\"quantity\":3}").getContentAsString(UTF_8))
+                .isEqualTo(CART_ITEM_NOT_FOUND);
+        assertThat(deleteItem(userId, americano).getContentAsString(UTF_8)).isEqualTo(CART_ITEM_NOT_FOUND);
+
+        entityManager.flush();
+        assertThat(jdbc.queryForObject(
+                "SELECT quantity FROM cart_items WHERE user_id = ? AND menu_id = ?", Integer.class, other, americano))
+                .isEqualTo(5);
+    }
+
+    @Test
+    void 없는_사용자의_삭제는_USER_NOT_FOUND() throws Exception {
+        assertThat(deleteItem(missingUserId, americano).getContentAsString(UTF_8)).isEqualTo(USER_NOT_FOUND);
+    }
+
+    // ---- 낙관적 락·N+1 ----
+
+    @Test
+    void 다른_곳에서_먼저_고친_행을_수정하면_낙관적_락이_막는다() throws Exception {
+        // 커밋 없이 @Version 동작을 확인한다: 같은 트랜잭션 안에서 DB 의 판 번호를 먼저 올려 두고 수정한다
+        add(userId, americano, "2");
+        entityManager.flush();
+        jdbc.update("UPDATE cart_items SET version = version + 1 WHERE user_id = ? AND menu_id = ?", userId, americano);
+
+        patchJson(userId, americano, "{\"quantity\":3}");
+
+        assertThatThrownBy(() -> entityManager.flush()).isInstanceOf(OptimisticLockException.class);
+    }
+
+    @Test
+    void 장바구니_조회는_항목_수와_상관없이_쿼리_2번이다() throws Exception {
+        add(userId, americano, "1");
+        add(userId, cloudLatte, "1");
+        add(userId, menuId("졸린 곰돌이 우유"), "1");
+        entityManager.flush();
+        entityManager.clear(); // 이미 읽어 둔 메뉴가 있으면 N+1 이 가려진다
+        Statistics stats = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+        stats.clear();
+
+        getCart(userId);
+
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(2L); // 사용자 확인 1 + 항목·메뉴 함께 1
+    }
+
+    // ---- helpers ----
+
+    private MockHttpServletResponse getCart(long targetUserId) throws Exception {
+        return mockMvc.perform(get("/api/users/{id}/cart", targetUserId)).andReturn().getResponse();
+    }
+
+    private MockHttpServletResponse deleteItem(long targetUserId, long menuId) throws Exception {
+        return mockMvc.perform(delete("/api/users/{id}/cart/items/{m}", targetUserId, menuId))
+                .andReturn().getResponse();
+    }
+
+    private MockHttpServletResponse add(long targetUserId, long menuId, String quantity) throws Exception {
+        return postJson(targetUserId, "{\"menuId\":" + menuId + ",\"quantity\":" + quantity + "}");
+    }
+
+    private MockHttpServletResponse postJson(long targetUserId, String body) throws Exception {
         return mockMvc.perform(
-                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                                .post("/api/users/{id}/cart/items", user)
+                        post("/api/users/{id}/cart/items", targetUserId)
                                 .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andReturn().getResponse();
     }
 
-    private MockHttpServletResponse patchJson(long user, long menu, String body) throws Exception {
+    private MockHttpServletResponse patchJson(long targetUserId, long menuId, String body) throws Exception {
         return mockMvc.perform(
-                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                                .patch("/api/users/{id}/cart/items/{m}", user, menu)
+                        patch("/api/users/{id}/cart/items/{m}", targetUserId, menuId)
                                 .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andReturn().getResponse();
     }

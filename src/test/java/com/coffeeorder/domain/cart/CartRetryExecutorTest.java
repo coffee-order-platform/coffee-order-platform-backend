@@ -66,12 +66,13 @@ class CartRetryExecutorTest {
     }
 
     @Test
-    void UNIQUE_위반이_2번이면_그대로_던진다() {
+    void UNIQUE_위반이_2번이면_CART_UPDATE_CONFLICT다() {
         AtomicInteger calls = new AtomicInteger();
 
         assertThatThrownBy(() -> executor.run(
                         failing(calls, 2, new DataIntegrityViolationException("uk_cart_items_user_id_menu_id"))))
-                .isInstanceOf(DataIntegrityViolationException.class);
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.CART_UPDATE_CONFLICT));
         assertThat(calls.get()).isEqualTo(2);
     }
 

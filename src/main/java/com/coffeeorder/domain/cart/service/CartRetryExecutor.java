@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
 /**
  * 장바구니 동시 수정 재시도 (노션 9-1 락 표, 2026-11-18 결정).
  * - 낙관적 락 충돌: 최신 상태를 다시 읽어 최대 2회 재시도, 그래도 충돌하면 CART_UPDATE_CONFLICT(409)
- * - 같은 메뉴 동시 첫 담기의 UNIQUE 위반: 1회 재시도(다시 시도하면 기존 행에 수량을 더하는 경로를 탄다)
+ * - 같은 메뉴 동시 첫 담기의 UNIQUE 위반: 1회 재시도(다시 시도하면 기존 행에 수량을 더하는 경로를 탄다),
+ *   그래도 위반이면 같은 동시 수정 충돌로 보고 CART_UPDATE_CONFLICT(409)
  * 각 시도는 새 트랜잭션이어야 하므로 이 클래스는 트랜잭션 밖(컨트롤러)에서 불린다.
  */
 @Slf4j
@@ -33,8 +34,11 @@ public class CartRetryExecutor {
                     throw new BusinessException(ErrorCode.CART_UPDATE_CONFLICT);
                 }
             } catch (DataIntegrityViolationException e) {
+                // 외래 키는 서비스가 먼저 확인하므로, 여기서 나는 위반은 (사용자, 메뉴) UNIQUE 경합뿐이다
                 if (++uniqueRetries > MAX_UNIQUE_RETRIES) {
-                    throw e;
+                    // 원인 예외를 함께 남겨, 나중에 다른 무결성 위반이 생겨도 409 에 가려지지 않게 한다
+                    log.warn("장바구니 UNIQUE 경합이 재시도 {}회 뒤에도 계속됨", MAX_UNIQUE_RETRIES, e);
+                    throw new BusinessException(ErrorCode.CART_UPDATE_CONFLICT);
                 }
             }
         }
