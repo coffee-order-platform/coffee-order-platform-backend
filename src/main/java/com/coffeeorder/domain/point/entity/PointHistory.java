@@ -39,7 +39,7 @@ public class PointHistory {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** 사용 내역만 주문과 연결된다(충전은 null). */
+    /** 사용·환불 내역만 주문과 연결된다(충전은 null). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id")
     private Order order;

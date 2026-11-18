@@ -107,6 +107,9 @@ class EntityMappingTest {
     void 컬럼_타입_길이_기본값이_ERD와_같다() {
         // JPA 가 아니라 information_schema 로 실제 DB 컬럼을 읽는다(@JdbcTypeCode·@ColumnDefault·length 회귀 방지)
         assertThat(columnType("point_histories", "type")).isEqualTo("varchar(10)");
+        assertThat(columnType("orders", "status")).isEqualTo("varchar(10)");
+        assertThat(raw("SELECT is_nullable FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'orders' AND column_name = 'status'")).isEqualTo("NO");
         assertThat(columnType("menus", "name")).isEqualTo("varchar(100)");
         assertThat(columnType("order_items", "menu_name")).isEqualTo("varchar(100)");
         assertThat(raw("SELECT is_nullable FROM information_schema.columns WHERE table_schema = DATABASE()"
@@ -118,6 +121,38 @@ class EntityMappingTest {
     private String columnType(String table, String column) {
         return raw("SELECT column_type FROM information_schema.columns WHERE table_schema = DATABASE()"
                 + " AND table_name = ? AND column_name = ?", table, column);
+    }
+
+    @Test
+    void 새_주문은_PAID_로_저장된다() {
+        User user = userRepository.saveAndFlush(new User("테스터"));
+        Order order = orderRepository.saveAndFlush(new Order(user, 4_500));
+
+        assertThat(raw("SELECT status FROM orders WHERE id = ?", order.getId())).isEqualTo("PAID");
+    }
+
+    @Test
+    void 주문_상태를_비우거나_없는_값으로_바꾸면_DB가_거부한다() {
+        User user = userRepository.saveAndFlush(new User("테스터"));
+        Order order = orderRepository.saveAndFlush(new Order(user, 4_500));
+
+        assertThatThrownBy(() -> jdbc.update("UPDATE orders SET status = NULL WHERE id = ?", order.getId()))
+                .isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.update("UPDATE orders SET status = 'CANCELED' WHERE id = ?", order.getId()))
+                .isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void 환불_내역은_REFUND_로_주문과_연결되어_저장된다() {
+        // DB 의 CHECK 제약이 REFUND 를 허용하는지까지 확인한다(옛 스키마는 CHARGE·USE 만 허용)
+        User user = userRepository.saveAndFlush(new User("테스터"));
+        Order order = orderRepository.saveAndFlush(new Order(user, 4_500));
+        PointHistory refund = pointHistoryRepository.saveAndFlush(
+                new PointHistory(user, order, PointHistoryType.REFUND, 4_500, 4_500));
+
+        assertThat(raw("SELECT type FROM point_histories WHERE id = ?", refund.getId())).isEqualTo("REFUND");
+        assertThat(jdbc.queryForObject("SELECT order_id FROM point_histories WHERE id = ?", Long.class, refund.getId()))
+                .isEqualTo(order.getId());
     }
 
     @Test
