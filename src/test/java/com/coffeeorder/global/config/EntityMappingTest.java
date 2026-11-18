@@ -132,6 +132,17 @@ class EntityMappingTest {
     }
 
     @Test
+    void 주문_상태를_비우거나_없는_값으로_바꾸면_DB가_거부한다() {
+        User user = userRepository.saveAndFlush(new User("테스터"));
+        Order order = orderRepository.saveAndFlush(new Order(user, 4_500));
+
+        assertThatThrownBy(() -> jdbc.update("UPDATE orders SET status = NULL WHERE id = ?", order.getId()))
+                .isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.update("UPDATE orders SET status = 'CANCELED' WHERE id = ?", order.getId()))
+                .isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
     void 환불_내역은_REFUND_로_주문과_연결되어_저장된다() {
         // DB 의 CHECK 제약이 REFUND 를 허용하는지까지 확인한다(옛 스키마는 CHARGE·USE 만 허용)
         User user = userRepository.saveAndFlush(new User("테스터"));
