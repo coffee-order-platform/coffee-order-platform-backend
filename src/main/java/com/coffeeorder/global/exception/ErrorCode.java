@@ -9,7 +9,7 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ErrorCode {
 
-    // 업무 규칙 (작업 가이드 PDF 에 확정된 7개: 이름·상태를 바꾸지 않는다)
+    // 업무 규칙 8개 = 작업 가이드 PDF 확정 7개(이름·상태를 바꾸지 않는다) + 11/18 추가 1개
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "메뉴를 찾을 수 없습니다."),
     CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니 항목을 찾을 수 없습니다."),
@@ -17,6 +17,8 @@ public enum ErrorCode {
     CART_EMPTY(HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),
     INSUFFICIENT_POINT(HttpStatus.BAD_REQUEST, "포인트가 부족합니다."),
     INVALID_CHARGE_AMOUNT(HttpStatus.BAD_REQUEST, "충전 금액이 올바르지 않습니다."),
+    // 2026-11-18 추가: 장바구니 동시 수정이 재시도(2회) 후에도 충돌할 때
+    CART_UPDATE_CONFLICT(HttpStatus.CONFLICT, "장바구니가 동시에 수정되었습니다. 다시 시도해 주세요."),
 
     // 공통
     NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 주소를 찾을 수 없습니다."),
