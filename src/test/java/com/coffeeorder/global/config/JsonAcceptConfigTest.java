@@ -25,6 +25,7 @@ class JsonAcceptConfigTest {
             "   ", "application/json", "*/*", "application/*", "application/json;q=0.1, */*;q=0",
             "*/*;q=0, application/json", "application/*;q=0, application/json", "*/*;q=0, application/*",
             "application/xml", "application/xml, application/json;q=0.5",
+            "application/xml;q=0, application/json", "text/html;q=0, */*", "application/xml;q=0",
             "application/json;q=abc", "application/json;q=2"})
     void JSON_을_받거나_판단할_수_없으면_false(String accept) {
         // application/xml 처럼 JSON 이 없는 경우와 깨진 q 는 스프링 produces 처리에 맡긴다(이미 실행 전 406)

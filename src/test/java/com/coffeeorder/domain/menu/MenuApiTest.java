@@ -42,6 +42,16 @@ class MenuApiTest {
     }
 
     @Test
+    void 없는_주소는_JSON_을_거절해도_404_다() throws Exception {
+        // q=0 검사는 컨트롤러 메서드에만 건다. 컨트롤러가 없는 주소는 원래대로 NOT_FOUND
+        MockHttpServletResponse res = mockMvc.perform(
+                        get("/api/nope").header(HttpHeaders.ACCEPT, "application/json;q=0"))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(404);
+    }
+
+    @Test
     void OPTIONS_는_JSON_을_거절해도_허용_메서드를_안내한다() throws Exception {
         MockHttpServletResponse res = mockMvc.perform(
                         options("/api/menus").header(HttpHeaders.ACCEPT, "application/json;q=0"))

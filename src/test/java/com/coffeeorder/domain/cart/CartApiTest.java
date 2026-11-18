@@ -299,7 +299,8 @@ class CartApiTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"application/xml", "application/json;q=0", "application/json;q=0, */*", "*/*;q=0"})
+    @ValueSource(strings = {"application/xml", "application/json;q=0", "application/json;q=0, */*", "*/*;q=0",
+            "application/json;q=abc"})
     void JSON_응답을_받지_않는_담기는_실행하지_않는다(String accept) throws Exception {
         // q=0 은 "받지 않겠다"는 뜻이다. JSON 에 적용되는 가장 구체적인 범위의 q 가 0 이면 거절한다
         MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/cart/items", userId)
