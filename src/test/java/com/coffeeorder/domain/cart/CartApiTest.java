@@ -30,6 +30,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -40,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 노션 테스트 케이스 A(담기)·L(조회)·U(수량 변경)·D(삭제)를 실제 MySQL 에서 확인한다.
  * 테스트마다 자기 사용자를 만들고 롤백한다. 메뉴는 시드 메뉴를 이름으로 찾는다(ID 하드코딩 금지).
  * 재시도 규칙은 CartRetryExecutorTest, 컨트롤러 → 재시도 → 409 배선은 CartRetryWiringTest 에서 확인한다.
+ * 실제 MySQL 의 UNIQUE 위반 예외를 재시도기가 알아보는지(제약 이름 모양)는 여기서 확인한다.
  * 실제 스레드 동시 충돌과 서비스 트랜잭션 자체(X-5, X-6)는 커밋이 필요해 11/20 동시성 테스트(D-10)에서 다룬다.
  */
 @SpringBootTest
@@ -296,15 +298,31 @@ class CartApiTest {
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(INVALID_REQUEST);
     }
 
-    @Test
-    void JSON_응답을_받지_않는_담기는_실행하지_않는다() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"application/xml", "application/json;q=0", "application/json;q=0, */*", "*/*;q=0"})
+    void JSON_응답을_받지_않는_담기는_실행하지_않는다(String accept) throws Exception {
+        // q=0 은 "받지 않겠다"는 뜻이다. JSON 에 적용되는 가장 구체적인 범위의 q 가 0 이면 거절한다
         MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/cart/items", userId)
-                        .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_XML)
+                        .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.ACCEPT, accept)
                         .content("{\"menuId\":" + americano + ",\"quantity\":1}"))
                 .andReturn().getResponse();
 
         assertThat(res.getStatus()).isEqualTo(406);
         assertThat(rowCount()).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"application/json", "*/*", "application/json;q=0.1, */*;q=0",
+            "application/xml, application/json;q=0.5", "application/*"})
+    void JSON_을_조금이라도_받는_Accept_는_정상_처리한다(String accept) throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/cart/items", userId)
+                        .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.ACCEPT, accept)
+                        .content("{\"menuId\":" + americano + ",\"quantity\":1}"))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(200);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(ADDED);
+        assertThat(rowCount()).isEqualTo(1);
     }
 
     // ---- 사용자 격리 (인증이 없어 userId 조건이 유일한 격리 장치) ----

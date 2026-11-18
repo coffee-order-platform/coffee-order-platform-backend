@@ -32,6 +32,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -128,11 +129,13 @@ class PointApiTest {
         assertThat(balanceInDb()).isEqualTo(150_000L);
     }
 
-    @Test
-    void JSON_응답을_받지_않는_충전_요청은_충전하지_않는다() throws Exception {
-        // produces 가 없으면 충전이 먼저 커밋되고 응답 변환에서 실패해 이중 충전 위험이 생긴다
+    @ParameterizedTest
+    @ValueSource(strings = {"application/xml", "application/json;q=0", "application/json;q=0, */*", "*/*;q=0"})
+    void JSON_응답을_받지_않는_충전_요청은_충전하지_않는다(String accept) throws Exception {
+        // produces 가 없으면 충전이 먼저 커밋되고 응답 변환에서 실패해 이중 충전 위험이 생긴다.
+        // q=0 은 "받지 않겠다"는 뜻이라, JSON 에 적용되는 가장 구체적인 범위의 q 가 0 이어도 같은 위험이다
         MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/points/charge", user.getId())
-                        .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_XML)
+                        .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.ACCEPT, accept)
                         .content("{\"amount\":1000}"))
                 .andReturn().getResponse();
 

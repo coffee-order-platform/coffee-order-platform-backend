@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
  * - 낙관적 락 충돌: 최신 상태를 다시 읽어 최대 2회 재시도, 그래도 충돌하면 CART_UPDATE_CONFLICT(409)
  * - 같은 메뉴 동시 첫 담기의 UNIQUE 위반: 1회 재시도(다시 시도하면 기존 행에 수량을 더하는 경로를 탄다),
  *   그래도 위반이면 같은 동시 수정 충돌로 보고 CART_UPDATE_CONFLICT(409)
+ * - 그 밖의 무결성 위반(외래 키·NOT NULL·다른 UNIQUE): 충돌이 아니므로 재시도·409 변환 없이 그대로 던진다
  * 각 시도는 새 트랜잭션이어야 하므로 이 클래스는 트랜잭션 밖(컨트롤러)에서 불린다.
  */
 @Slf4j

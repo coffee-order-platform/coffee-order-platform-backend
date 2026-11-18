@@ -94,12 +94,14 @@ class CartRetryExecutorTest {
         DataIntegrityViolationException[] others = {
                 violation(ConstraintKind.FOREIGN_KEY, "fk_cart_items_menu_id"),
                 violation(ConstraintKind.UNIQUE, "uk_points_user_id"),
+                violation(ConstraintKind.NOT_NULL, null), // 제약 이름을 못 읽은 위반
                 new DataIntegrityViolationException("원인 없음")};
         for (DataIntegrityViolationException other : others) {
             AtomicInteger calls = new AtomicInteger();
+            String label = other.getCause() == null ? "원인 없음" : other.getCause().toString();
 
-            assertThatThrownBy(() -> executor.run(failing(calls, 5, other))).isSameAs(other);
-            assertThat(calls.get()).isEqualTo(1);
+            assertThatThrownBy(() -> executor.run(failing(calls, 5, other))).as(label).isSameAs(other);
+            assertThat(calls.get()).as(label).isEqualTo(1);
         }
     }
 
