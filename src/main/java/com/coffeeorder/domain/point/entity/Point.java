@@ -40,4 +40,9 @@ public class Point extends BaseEntity {
         this.user = user;
         this.balance = balance;
     }
+
+    /** 금액 검증은 호출하는 서비스가 한다. 비관적 락으로 조회한 행에서만 호출한다. */
+    public void charge(long amount) {
+        this.balance += amount;
+    }
 }
