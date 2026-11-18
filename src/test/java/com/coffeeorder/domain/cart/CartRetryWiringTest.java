@@ -92,6 +92,7 @@ class CartRetryWiringTest {
 
         MockHttpServletResponse res = add("{\"menuId\":" + americano + ",\"quantity\":1}");
 
+        assertThat(res.getStatus()).isEqualTo(409);
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(CONFLICT);
         verify(cartService, times(2)).add(userId, americano, 1);
     }
@@ -104,6 +105,7 @@ class CartRetryWiringTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":3}"))
                 .andReturn().getResponse();
 
+        assertThat(res.getStatus()).isEqualTo(409);
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(CONFLICT);
         verify(cartService, times(3)).changeQuantity(userId, americano, 3);
     }
@@ -115,6 +117,7 @@ class CartRetryWiringTest {
         MockHttpServletResponse res = mockMvc.perform(delete("/api/users/{id}/cart/items/{m}", userId, americano))
                 .andReturn().getResponse();
 
+        assertThat(res.getStatus()).isEqualTo(409);
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(CONFLICT);
         verify(cartService, times(3)).remove(userId, americano);
     }
