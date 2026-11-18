@@ -108,6 +108,8 @@ class EntityMappingTest {
         // JPA 가 아니라 information_schema 로 실제 DB 컬럼을 읽는다(@JdbcTypeCode·@ColumnDefault·length 회귀 방지)
         assertThat(columnType("point_histories", "type")).isEqualTo("varchar(10)");
         assertThat(columnType("orders", "status")).isEqualTo("varchar(10)");
+        assertThat(raw("SELECT is_nullable FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'orders' AND column_name = 'status'")).isEqualTo("NO");
         assertThat(columnType("menus", "name")).isEqualTo("varchar(100)");
         assertThat(columnType("order_items", "menu_name")).isEqualTo("varchar(100)");
         assertThat(raw("SELECT is_nullable FROM information_schema.columns WHERE table_schema = DATABASE()"
@@ -138,6 +140,8 @@ class EntityMappingTest {
                 new PointHistory(user, order, PointHistoryType.REFUND, 4_500, 4_500));
 
         assertThat(raw("SELECT type FROM point_histories WHERE id = ?", refund.getId())).isEqualTo("REFUND");
+        assertThat(jdbc.queryForObject("SELECT order_id FROM point_histories WHERE id = ?", Long.class, refund.getId()))
+                .isEqualTo(order.getId());
     }
 
     @Test
