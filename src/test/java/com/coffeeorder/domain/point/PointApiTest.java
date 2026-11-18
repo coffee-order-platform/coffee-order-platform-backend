@@ -154,6 +154,17 @@ class PointApiTest {
     }
 
     @Test
+    void E2_충전_주소에_GET은_405이고_Allow_헤더가_POST다() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(get("/api/users/{id}/points/charge", user.getId()))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(405);
+        assertThat(res.getHeader("Allow")).contains("POST");
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(
+                "{\"status\":405,\"code\":\"METHOD_NOT_ALLOWED\",\"message\":\"지원하지 않는 요청 방식입니다.\"}");
+    }
+
+    @Test
     void C7_없는_사용자_충전은_USER_NOT_FOUND() throws Exception {
         MockHttpServletResponse res = charge(missingUserId, "{\"amount\":1000}");
 
@@ -229,10 +240,13 @@ class PointApiTest {
 
         try (Connection other = dataSource.getConnection();
              PreparedStatement ps = other.prepareStatement(
-                     "SELECT id FROM points WHERE user_id = ? FOR UPDATE NOWAIT")) {
+                     "SELECT id FROM points WHERE user_id = ? FOR SHARE NOWAIT")) {
+            // FOR SHARE 는 배타 락(PESSIMISTIC_WRITE)과만 충돌한다 → 공유 락(PESSIMISTIC_READ)으로 바뀌면 실패
             other.setAutoCommit(false);
             ps.setLong(1, seedUserId);
-            assertThatThrownBy(ps::executeQuery).isInstanceOf(SQLException.class);
+            // 3572 = 행이 잠겨 있어 NOWAIT 가 즉시 실패. 구문 오류(1064) 등으로 우연히 통과하지 않게 코드까지 본다
+            assertThatThrownBy(ps::executeQuery)
+                    .isInstanceOfSatisfying(SQLException.class, e -> assertThat(e.getErrorCode()).isEqualTo(3572));
             other.rollback();
         }
     }
@@ -240,9 +254,10 @@ class PointApiTest {
     @Test
     void 충전_서비스에는_트랜잭션이_걸려_있다() throws Exception {
         // 이 테스트 클래스는 자체 트랜잭션 안에서 돌아서, 서비스의 @Transactional 이 빠져도 다른 테스트가 알아채지 못한다
-        assertThat(PointService.class.getMethod("charge", Long.class, long.class)
-                        .isAnnotationPresent(org.springframework.transaction.annotation.Transactional.class))
-                .isTrue();
+        Transactional tx = PointService.class.getMethod("charge", Long.class, long.class)
+                .getAnnotation(Transactional.class);
+        assertThat(tx).isNotNull();
+        assertThat(tx.readOnly()).isFalse();
     }
 
     @Test

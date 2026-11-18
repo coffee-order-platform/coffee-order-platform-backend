@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -34,6 +35,17 @@ class MenuApiTest {
                 "\"name\":\"졸린 곰돌이 우유\",\"price\":5000",
                 "\"name\":\"번개맞은 바닐라\",\"price\":5500",
                 "\"name\":\"달빛 두리안 프라푸치노\",\"price\":7000");
+    }
+
+    @Test
+    void JSON을_받지_않는_요청은_406_JSON으로_응답한다() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(get("/api/menus").accept(MediaType.APPLICATION_XML))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(406);
+        assertThat(res.getContentType()).startsWith(MediaType.APPLICATION_JSON_VALUE);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(
+                "{\"status\":406,\"code\":\"NOT_ACCEPTABLE\",\"message\":\"지원하지 않는 응답 형식입니다.\"}");
     }
 
     @Test
