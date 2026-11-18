@@ -15,12 +15,12 @@ import com.coffeeorder.domain.cart.service.CartService;
 import com.coffeeorder.domain.user.entity.User;
 import com.coffeeorder.domain.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
+import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -87,7 +87,7 @@ class CartRetryWiringTest {
 
     @Test
     void 같은_메뉴_첫_담기_UNIQUE_위반이_계속되면_409() throws Exception {
-        doThrow(new DataIntegrityViolationException("uk_cart_items_user_id_menu_id"))
+        doThrow(CartRetryExecutorTest.violation(ConstraintKind.UNIQUE, "uk_cart_items_user_id_menu_id"))
                 .when(cartService).add(anyLong(), anyLong(), anyInt());
 
         MockHttpServletResponse res = add("{\"menuId\":" + americano + ",\"quantity\":1}");

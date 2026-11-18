@@ -3,15 +3,23 @@ package com.coffeeorder.domain.cart;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import com.coffeeorder.domain.cart.entity.CartItem;
+import com.coffeeorder.domain.cart.repository.CartItemRepository;
+import com.coffeeorder.domain.cart.service.CartRetryExecutor;
+import com.coffeeorder.domain.menu.entity.Menu;
 import com.coffeeorder.domain.user.entity.User;
 import com.coffeeorder.domain.user.repository.UserRepository;
+import com.coffeeorder.global.exception.BusinessException;
+import com.coffeeorder.global.exception.ErrorCode;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +29,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -55,6 +64,8 @@ class CartApiTest {
     @Autowired UserRepository userRepository;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager entityManager;
+    @Autowired CartItemRepository cartItemRepository;
+    @Autowired CartRetryExecutor retryExecutor;
 
     private long userId;
     private long missingUserId;
@@ -352,13 +363,39 @@ class CartApiTest {
         add(userId, menuId("졸린 곰돌이 우유"), "1");
         entityManager.flush();
         entityManager.clear(); // 이미 읽어 둔 메뉴가 있으면 N+1 이 가려진다
+        // 통계는 SessionFactory 전체가 공유하므로 초기화하지 않고 전후 차이로 세고, 원래 켜짐 상태로 되돌린다
         Statistics stats = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = stats.isStatisticsEnabled();
         stats.setStatisticsEnabled(true);
-        stats.clear();
+        try {
+            long before = stats.getPrepareStatementCount();
 
-        getCart(userId);
+            getCart(userId);
 
-        assertThat(stats.getPrepareStatementCount()).isEqualTo(2L); // 사용자 확인 1 + 항목·메뉴 함께 1
+            assertThat(stats.getPrepareStatementCount() - before).isEqualTo(2L); // 사용자 확인 1 + 항목·메뉴 함께 1
+        } finally {
+            stats.setStatisticsEnabled(wasEnabled);
+        }
+    }
+
+    @Test
+    void 실제_DB_의_장바구니_UNIQUE_위반은_재시도_대상으로_알아본다() throws Exception {
+        // MySQL 이 돌려주는 제약 이름 모양이 재시도기의 비교와 맞는지, 실제 위반 예외로 확인한다
+        add(userId, americano, "1");
+        entityManager.flush();
+        DataIntegrityViolationException real = catchThrowableOfType(DataIntegrityViolationException.class,
+                () -> cartItemRepository.saveAndFlush(new CartItem(userRepository.getReferenceById(userId),
+                        entityManager.getReference(Menu.class, americano), 1)));
+        assertThat(real).isNotNull();
+        AtomicInteger calls = new AtomicInteger();
+
+        assertThatThrownBy(() -> retryExecutor.run(() -> {
+                    calls.incrementAndGet();
+                    throw real;
+                }))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.CART_UPDATE_CONFLICT));
+        assertThat(calls.get()).isEqualTo(2); // 처음 1번 + 재시도 1번
     }
 
     // ---- helpers ----
