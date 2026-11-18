@@ -1,6 +1,7 @@
 package com.coffeeorder.global.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -66,6 +67,20 @@ class DataInitializerTest {
         initializer.run(null);
 
         verify(pointRepository, times(3)).save(any(Point.class));
+        verify(menuRepository, never()).save(any());
+    }
+
+    @Test
+    void 포인트_저장이_실패하면_예외가_전파되고_이후_저장은_멈춘다() {
+        when(userRepository.count()).thenReturn(0L);
+        when(menuRepository.count()).thenReturn(0L);
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(pointRepository.save(any(Point.class))).thenThrow(new IllegalStateException("저장 실패"));
+
+        assertThatThrownBy(() -> initializer.run(null)).isInstanceOf(IllegalStateException.class);
+
+        // 첫 사용자에서 멈춰 나머지 사용자·메뉴는 저장 시도조차 하지 않는다(트랜잭션 롤백 대상은 첫 사용자 1명)
+        verify(userRepository, times(1)).save(any(User.class));
         verify(menuRepository, never()).save(any());
     }
 
