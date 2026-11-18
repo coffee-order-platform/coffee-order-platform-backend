@@ -145,8 +145,9 @@ class CartApiTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "{\"menuId\":%d,\"quantity\":\"abc\"}", "{\"menuId\":%d}", "{\"menuId\":%d,\"quantity\":null}",
-            "{\"menuId\":%d,\"quantity\":1.5}", "{\"quantity\":1}", "{\"menuId\":%d,\"quantity\":"})
-    void A7_수량_문자_누락_소수_메뉴_누락_깨진_JSON은_INVALID_REQUEST(String template) throws Exception {
+            "{\"menuId\":%d,\"quantity\":1.5}", "{\"quantity\":1}", "{\"menuId\":%d,\"quantity\":",
+            "{\"menuId\":%d,\"quantity\":\"5\"}", "{\"menuId\":\"%d\",\"quantity\":1}"})
+    void A7_수량_문자_누락_소수_따옴표_숫자_메뉴_누락_깨진_JSON은_INVALID_REQUEST(String template) throws Exception {
         MockHttpServletResponse res = postJson(userId, template.formatted(americano));
 
         assertThat(res.getStatus()).isEqualTo(400);
@@ -233,8 +234,9 @@ class CartApiTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"quantity\":null}", "{\"quantity\":\"abc\"}", "{\"quantity\":2.5}"})
-    void 변경_수량_누락_문자_소수는_INVALID_REQUEST(String body) throws Exception {
+    @ValueSource(strings = {"{}", "{\"quantity\":null}", "{\"quantity\":\"abc\"}", "{\"quantity\":2.5}",
+            "{\"quantity\":\"5\"}"})
+    void 변경_수량_누락_문자_소수_따옴표_숫자는_INVALID_REQUEST(String body) throws Exception {
         add(userId, americano, "2");
 
         MockHttpServletResponse res = patchJson(userId, americano, body);

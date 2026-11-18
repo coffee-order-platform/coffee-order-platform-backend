@@ -119,8 +119,8 @@ class PointApiTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "{}", "{\"amount\":null}", "{\"amount\":\"abc\"}", "{\"amount\":",
-            "{\"amount\":1000.5}", "{\"amount\":1000.0}"})
-    void C6_E4_금액_누락_문자_깨진_JSON_소수는_INVALID_REQUEST(String body) throws Exception {
+            "{\"amount\":1000.5}", "{\"amount\":1000.0}", "{\"amount\":\"5000\"}"})
+    void C6_E4_금액_누락_문자_깨진_JSON_소수_따옴표_숫자는_INVALID_REQUEST(String body) throws Exception {
         MockHttpServletResponse res = charge(user.getId(), body);
 
         assertThat(res.getStatus()).isEqualTo(400);
