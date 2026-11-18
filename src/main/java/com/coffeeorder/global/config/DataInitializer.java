@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 앱 시작 시 가짜 사용자·메뉴를 만든다. 테이블마다 비어 있을 때만 만들어 재시작해도 중복되지 않는다.
  * 사용자와 포인트 행은 한 트랜잭션이라 "포인트 없는 사용자"가 남지 않는다. 초기 포인트는 충전 내역에 남기지 않는다.
+ * 앱 인스턴스 1대로 뜨는 것을 전제한다(동시에 2대가 빈 DB 에 뜨면 중복 시드가 들어갈 수 있다).
  */
 @Slf4j
 @Component

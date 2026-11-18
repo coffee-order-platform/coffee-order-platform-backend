@@ -58,6 +58,18 @@ class DataInitializerTest {
     }
 
     @Test
+    void 메뉴만_남아_있고_사용자가_없으면_사용자와_포인트는_만들고_메뉴는_만들지_않는다() {
+        when(userRepository.count()).thenReturn(0L);
+        when(menuRepository.count()).thenReturn(1L);
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        initializer.run(null);
+
+        verify(pointRepository, times(3)).save(any(Point.class));
+        verify(menuRepository, never()).save(any());
+    }
+
+    @Test
     void 메뉴가_이미_있으면_메뉴는_만들지_않는다() {
         when(userRepository.count()).thenReturn(1L);
         when(menuRepository.count()).thenReturn(1L);

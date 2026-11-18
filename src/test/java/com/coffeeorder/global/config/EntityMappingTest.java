@@ -83,19 +83,41 @@ class EntityMappingTest {
     }
 
     @Test
-    void 일곱_테이블에_한_행씩_저장되고_사용_내역은_주문과_연결된다() {
+    void 일곱_테이블에_저장되고_주문_항목_금액과_사용_내역_연결이_DB_원본과_맞다() {
         User user = userRepository.saveAndFlush(new User("테스터"));
         Menu menu = menuRepository.saveAndFlush(new Menu("테스트 라떼", 5_000));
         pointRepository.saveAndFlush(new Point(user, 10_000));
         cartItemRepository.saveAndFlush(new CartItem(user, menu, 2));
         Order order = orderRepository.saveAndFlush(new Order(user, 10_000));
-        orderItemRepository.saveAndFlush(new OrderItem(order, menu, menu.getName(), 5_000, 2, 10_000));
+        OrderItem orderItem = orderItemRepository.saveAndFlush(
+                new OrderItem(order, menu, menu.getName(), 5_000, 2, 10_000));
         PointHistory use = pointHistoryRepository.saveAndFlush(
                 new PointHistory(user, order, PointHistoryType.USE, 10_000, 0));
 
+        assertThat(raw("SELECT CAST(unit_price AS CHAR) FROM order_items WHERE id = ?", orderItem.getId()))
+                .isEqualTo("5000");
+        assertThat(raw("SELECT CAST(line_price AS CHAR) FROM order_items WHERE id = ?", orderItem.getId()))
+                .isEqualTo("10000");
         assertThat(raw("SELECT type FROM point_histories WHERE id = ?", use.getId())).isEqualTo("USE");
         assertThat(jdbc.queryForObject("SELECT order_id FROM point_histories WHERE id = ?", Long.class, use.getId()))
                 .isEqualTo(order.getId());
+    }
+
+    @Test
+    void 컬럼_타입_길이_기본값이_ERD와_같다() {
+        // JPA 가 아니라 information_schema 로 실제 DB 컬럼을 읽는다(@JdbcTypeCode·@ColumnDefault·length 회귀 방지)
+        assertThat(columnType("point_histories", "type")).isEqualTo("varchar(10)");
+        assertThat(columnType("menus", "name")).isEqualTo("varchar(100)");
+        assertThat(columnType("order_items", "menu_name")).isEqualTo("varchar(100)");
+        assertThat(raw("SELECT is_nullable FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'menus' AND column_name = 'name'")).isEqualTo("NO");
+        assertThat(raw("SELECT column_default FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'points' AND column_name = 'balance'")).isEqualTo("0");
+    }
+
+    private String columnType(String table, String column) {
+        return raw("SELECT column_type FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = ? AND column_name = ?", table, column);
     }
 
     @Test
