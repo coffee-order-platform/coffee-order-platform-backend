@@ -9,7 +9,7 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ErrorCode {
 
-    // 업무 규칙 (작업 가이드 PDF 에 확정된 7개: 이름·상태를 바꾸지 않는다)
+    // 업무 규칙 8개 = 작업 가이드 PDF 확정 7개(이름·상태를 바꾸지 않는다) + 11/18 추가 1개
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "메뉴를 찾을 수 없습니다."),
     CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니 항목을 찾을 수 없습니다."),
