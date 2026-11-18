@@ -51,4 +51,9 @@ public class CartItem extends BaseEntity {
         this.menu = menu;
         this.quantity = quantity;
     }
+
+    /** 범위(1~99) 검증은 서비스가 한다. 저장 시 version 이 바뀌었으면 낙관적 락 충돌이 난다. */
+    public void changeQuantity(int quantity) {
+        this.quantity = quantity;
+    }
 }
