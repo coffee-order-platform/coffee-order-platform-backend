@@ -4,6 +4,8 @@ import com.coffeeorder.domain.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -15,6 +17,8 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -37,6 +41,12 @@ public class Order {
     @Column(name = "total_price", nullable = false)
     private long totalPrice;
 
+    /** 주문은 결제와 함께 만들어지므로 PAID 로 시작하고, 전체 환불되면 REFUNDED 가 된다. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, length = 10)
+    private OrderStatus status;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -44,5 +54,6 @@ public class Order {
     public Order(User user, long totalPrice) {
         this.user = user;
         this.totalPrice = totalPrice;
+        this.status = OrderStatus.PAID;
     }
 }

@@ -9,11 +9,11 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
-/** 에러코드 13개(업무 8 + 공통 5)의 이름·HTTP 상태·응답 문구가 바뀌면 실패한다. */
+/** 에러코드 15개(업무 10 + 공통 5)의 이름·HTTP 상태·응답 문구가 바뀌면 실패한다. */
 class ErrorCodeTest {
 
     @Test
-    void 에러코드_13개의_이름과_HTTP_상태가_확정값과_같다() {
+    void 에러코드_15개의_이름과_HTTP_상태가_확정값과_같다() {
         Map<String, HttpStatus> expected = new LinkedHashMap<>();
         expected.put("USER_NOT_FOUND", HttpStatus.NOT_FOUND);
         expected.put("MENU_NOT_FOUND", HttpStatus.NOT_FOUND);
@@ -23,6 +23,8 @@ class ErrorCodeTest {
         expected.put("INSUFFICIENT_POINT", HttpStatus.BAD_REQUEST);
         expected.put("INVALID_CHARGE_AMOUNT", HttpStatus.BAD_REQUEST);
         expected.put("CART_UPDATE_CONFLICT", HttpStatus.CONFLICT);
+        expected.put("ORDER_NOT_FOUND", HttpStatus.NOT_FOUND);
+        expected.put("ALREADY_REFUNDED", HttpStatus.BAD_REQUEST);
         expected.put("NOT_FOUND", HttpStatus.NOT_FOUND);
         expected.put("METHOD_NOT_ALLOWED", HttpStatus.METHOD_NOT_ALLOWED);
         expected.put("UNSUPPORTED_MEDIA_TYPE", HttpStatus.UNSUPPORTED_MEDIA_TYPE);
@@ -36,7 +38,7 @@ class ErrorCodeTest {
     }
 
     @Test
-    void 에러코드_13개의_응답_문구가_고정되어_있다() {
+    void 에러코드_15개의_응답_문구가_고정되어_있다() {
         Map<ErrorCode, String> expected = new EnumMap<>(ErrorCode.class);
         expected.put(ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다.");
         expected.put(ErrorCode.MENU_NOT_FOUND, "메뉴를 찾을 수 없습니다.");
@@ -46,6 +48,8 @@ class ErrorCodeTest {
         expected.put(ErrorCode.INSUFFICIENT_POINT, "포인트가 부족합니다.");
         expected.put(ErrorCode.INVALID_CHARGE_AMOUNT, "충전 금액이 올바르지 않습니다.");
         expected.put(ErrorCode.CART_UPDATE_CONFLICT, "장바구니가 동시에 수정되었습니다. 다시 시도해 주세요.");
+        expected.put(ErrorCode.ORDER_NOT_FOUND, "주문을 찾을 수 없습니다.");
+        expected.put(ErrorCode.ALREADY_REFUNDED, "이미 환불된 주문입니다.");
         expected.put(ErrorCode.NOT_FOUND, "요청한 주소를 찾을 수 없습니다.");
         expected.put(ErrorCode.METHOD_NOT_ALLOWED, "지원하지 않는 요청 방식입니다.");
         expected.put(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다.");
