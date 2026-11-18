@@ -17,7 +17,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.ColumnDefault;
 
-/** 사용자별 포인트 잔액(1:1). 충전·차감 때 이 행에 비관적 락을 건다(다음 묶음). */
+/** 사용자별 포인트 잔액(1:1). 잔액을 바꿀 때는 이 행에 비관적 락을 건다(충전 적용, 차감·환불은 주문 묶음). */
 @Getter
 @Entity
 @Table(name = "points", uniqueConstraints = @UniqueConstraint(name = "uk_points_user_id", columnNames = "user_id"))
@@ -39,5 +39,10 @@ public class Point extends BaseEntity {
     public Point(User user, long balance) {
         this.user = user;
         this.balance = balance;
+    }
+
+    /** 금액 검증은 호출하는 서비스가 한다. 비관적 락으로 조회한 행에서만 호출한다. */
+    public void charge(long amount) {
+        this.balance += amount;
     }
 }
