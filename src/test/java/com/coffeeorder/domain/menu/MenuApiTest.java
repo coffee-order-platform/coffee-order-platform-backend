@@ -3,6 +3,7 @@ package com.coffeeorder.domain.menu;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,16 @@ class MenuApiTest {
                 "\"name\":\"졸린 곰돌이 우유\",\"price\":5000",
                 "\"name\":\"번개맞은 바닐라\",\"price\":5500",
                 "\"name\":\"달빛 두리안 프라푸치노\",\"price\":7000");
+    }
+
+    @Test
+    void OPTIONS_는_JSON_을_거절해도_허용_메서드를_안내한다() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(
+                        options("/api/menus").header(HttpHeaders.ACCEPT, "application/json;q=0"))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(200);
+        assertThat(res.getHeader(HttpHeaders.ALLOW)).contains("GET").doesNotContain("POST");
     }
 
     @ParameterizedTest
