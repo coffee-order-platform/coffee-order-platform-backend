@@ -2,6 +2,6 @@ package com.coffeeorder.domain.cart.dto;
 
 import jakarta.validation.constraints.NotNull;
 
-/** 누락·null·문자·소수는 INVALID_REQUEST, 수량 범위(1~99) 위반은 서비스에서 INVALID_QUANTITY. */
+/** 누락·null·문자·소수·따옴표 숫자("5")는 INVALID_REQUEST, 수량 범위(1~99) 위반은 서비스에서 INVALID_QUANTITY. */
 public record UpdateCartItemRequest(@NotNull Integer quantity) {
 }

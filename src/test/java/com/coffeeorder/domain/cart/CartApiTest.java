@@ -241,6 +241,7 @@ class CartApiTest {
 
         MockHttpServletResponse res = patchJson(userId, americano, body);
 
+        assertThat(res.getStatus()).isEqualTo(400);
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(INVALID_REQUEST);
         assertThat(quantityInDb(americano)).isEqualTo(2);
     }
