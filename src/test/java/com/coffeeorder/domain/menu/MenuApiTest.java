@@ -6,9 +6,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,9 +40,10 @@ class MenuApiTest {
                 "\"name\":\"달빛 두리안 프라푸치노\",\"price\":7000");
     }
 
-    @Test
-    void JSON을_받지_않는_요청은_406_JSON으로_응답한다() throws Exception {
-        MockHttpServletResponse res = mockMvc.perform(get("/api/menus").accept(MediaType.APPLICATION_XML))
+    @ParameterizedTest
+    @ValueSource(strings = {"application/xml", "application/json;q=0"})
+    void JSON을_받지_않는_요청은_406_JSON으로_응답한다(String accept) throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(get("/api/menus").header(HttpHeaders.ACCEPT, accept))
                 .andReturn().getResponse();
 
         assertThat(res.getStatus()).isEqualTo(406);

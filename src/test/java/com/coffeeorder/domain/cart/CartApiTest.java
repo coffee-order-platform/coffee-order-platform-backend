@@ -311,6 +311,36 @@ class CartApiTest {
         assertThat(rowCount()).isZero();
     }
 
+    @Test
+    void Accept_를_두_줄로_나눠_JSON_을_거절해도_담기는_실행하지_않는다() throws Exception {
+        // "Accept: */*" + "Accept: application/json;q=0" 은 한 줄 "*/*, application/json;q=0" 과 같은 뜻이다
+        MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/cart/items", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.ACCEPT, "*/*").header(HttpHeaders.ACCEPT, "application/json;q=0")
+                        .content("{\"menuId\":" + americano + ",\"quantity\":1}"))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(406);
+        assertThat(rowCount()).isZero();
+    }
+
+    @Test
+    void JSON_을_q0_으로_거절한_수량_변경과_삭제는_실행하지_않는다() throws Exception {
+        add(userId, americano, "2");
+
+        MockHttpServletResponse changed = mockMvc.perform(patch("/api/users/{id}/cart/items/{m}", userId, americano)
+                        .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.ACCEPT, "application/json;q=0")
+                        .content("{\"quantity\":5}"))
+                .andReturn().getResponse();
+        MockHttpServletResponse removed = mockMvc.perform(delete("/api/users/{id}/cart/items/{m}", userId, americano)
+                        .header(HttpHeaders.ACCEPT, "application/json;q=0"))
+                .andReturn().getResponse();
+
+        assertThat(changed.getStatus()).isEqualTo(406);
+        assertThat(removed.getStatus()).isEqualTo(406);
+        assertThat(quantityInDb(americano)).isEqualTo(2);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"application/json", "*/*", "application/json;q=0.1, */*;q=0",
             "application/xml, application/json;q=0.5", "application/*"})

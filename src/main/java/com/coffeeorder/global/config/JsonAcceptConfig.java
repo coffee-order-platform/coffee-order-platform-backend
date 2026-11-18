@@ -2,7 +2,7 @@ package com.coffeeorder.global.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.List;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -16,7 +16,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Accept 가 JSON 을 q=0(= 받지 않겠다)으로 거절하면 컨트롤러 실행 전에 406 NOT_ACCEPTABLE 로 막는다.
- * 스프링의 produces 비교는 q=0 을 거절로 보지 않아, 충전·담기가 먼저 실행될 수 있기 때문이다(11/18 결정).
+ * 스프링의 produces 비교는 q=0 을 거절로 보지 않아, 충전·담기·수량 변경·삭제가 먼저 실행될 수 있기 때문이다(11/18 결정).
+ * 모든 API 가 JSON 만 응답하므로 조회 API 에도 똑같이 적용한다(JSON 을 거절한 클라이언트에 JSON 을 주지 않는다).
  * application/xml 처럼 JSON 이 아예 없는 Accept 는 produces 가 이미 실행 전에 406 으로 막는다.
  */
 @Configuration
@@ -28,7 +29,9 @@ public class JsonAcceptConfig implements WebMvcConfigurer {
             @Override
             public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
                     throws HttpMediaTypeNotAcceptableException {
-                if (handler instanceof HandlerMethod && refusesJson(request.getHeader(HttpHeaders.ACCEPT))) {
+                // Accept 가 여러 줄로 오면 스프링은 모두 이어 보므로 여기서도 전부 이어 본다(첫 줄만 보면 우회된다)
+                String accept = String.join(",", Collections.list(request.getHeaders(HttpHeaders.ACCEPT)));
+                if (handler instanceof HandlerMethod && refusesJson(accept)) {
                     throw new HttpMediaTypeNotAcceptableException(List.of(MediaType.APPLICATION_JSON));
                 }
                 return true;
@@ -36,7 +39,10 @@ public class JsonAcceptConfig implements WebMvcConfigurer {
         });
     }
 
-    /** JSON 에 적용되는 가장 구체적인 범위(application/json, 그다음 application/*, 그다음 모든 형식)의 q 가 0 이면 거절(RFC 9110). */
+    /**
+     * JSON 에 적용되는 가장 구체적인 범위(application/json, 그다음 application/*, 그다음 모든 형식)의 q 가 0 이면 거절(RFC 9110).
+     * 같은 구체도의 범위가 여럿이면(예: "application/json, application/json;q=0") 순서와 상관없이 하나라도 q=0 이면 거절한다.
+     */
     static boolean refusesJson(String accept) {
         if (accept == null || accept.isBlank()) {
             return false;
@@ -47,10 +53,14 @@ public class JsonAcceptConfig implements WebMvcConfigurer {
         } catch (InvalidMediaTypeException e) {
             return false; // 깨진 Accept 는 스프링의 기존 처리에 맡긴다
         }
-        return ranges.stream()
-                .filter(range -> range.includes(MediaType.APPLICATION_JSON))
-                .min(Comparator.comparingInt(range -> range.isWildcardType() ? 2 : range.isWildcardSubtype() ? 1 : 0))
-                .map(range -> range.getQualityValue() == 0)
-                .orElse(false);
+        List<MediaType> jsonRanges = ranges.stream().filter(range -> range.includes(MediaType.APPLICATION_JSON)).toList();
+        int mostSpecific = jsonRanges.stream().mapToInt(JsonAcceptConfig::rank).min().orElse(-1);
+        return jsonRanges.stream()
+                .anyMatch(range -> rank(range) == mostSpecific && range.getQualityValue() == 0);
+    }
+
+    /** 0 = application/json, 1 = application/*, 2 = 모든 형식. 작을수록 구체적이다. */
+    private static int rank(MediaType range) {
+        return range.isWildcardType() ? 2 : range.isWildcardSubtype() ? 1 : 0;
     }
 }
