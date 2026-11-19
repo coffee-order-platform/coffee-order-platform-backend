@@ -3,6 +3,8 @@ package com.coffeeorder.domain.order.event;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import com.coffeeorder.domain.order.event.OrderCompletedEvent.OrderedMenu;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -12,7 +14,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /** 커밋 후 처리(O-8, O-10). 롤백형 API 테스트에서는 돌지 않아 리스너를 직접 불러 확인한다. DB·스프링 없이 돈다. */
 class OrderEventListenerTest {
 
-    private final OrderCompletedEvent event = new OrderCompletedEvent(10L, 1L, List.of(1L, 2L), 15_000L);
+    private final OrderCompletedEvent event = new OrderCompletedEvent(10L, 1L,
+            List.of(new OrderedMenu(1L, 2), new OrderedMenu(2L, 1)), 15_000L, LocalDateTime.of(2099, 3, 10, 12, 0));
 
     @Test
     void O8_주문_1건에_주문_데이터를_1번_보낸다() {
