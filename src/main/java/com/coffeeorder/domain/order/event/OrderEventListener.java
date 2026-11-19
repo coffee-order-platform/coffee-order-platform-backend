@@ -8,7 +8,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
  * 주문 커밋 후 처리. 커밋된 주문만 받으므로 실패한 주문은 전송되지 않는다(테스트 케이스 O-9).
- * 전송이 실패해도 주문은 이미 커밋됐으니 로그만 남긴다(O-10, 아웃박스 재전송은 2주차).
+ * 전송이 실패해도 주문은 이미 커밋됐으니 로그만 남긴다(O-10). 다시 보내지 않아 유실된다 — 아웃박스 재전송은 2주차(V2 메모 D-13).
  */
 @Slf4j
 @Component

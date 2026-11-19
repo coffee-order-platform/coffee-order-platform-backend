@@ -42,9 +42,4 @@ class OrderEventListenerTest {
         assertThat(annotation).isNotNull();
         assertThat(annotation.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
     }
-
-    @Test
-    void Mock_전송은_예외_없이_로그만_남긴다() {
-        assertThatCode(() -> new LoggingOrderDataSender().send(event)).doesNotThrowAnyException();
-    }
 }

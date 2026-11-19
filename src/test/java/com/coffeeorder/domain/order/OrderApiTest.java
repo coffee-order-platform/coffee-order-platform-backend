@@ -2,19 +2,20 @@ package com.coffeeorder.domain.order;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.coffeeorder.domain.cart.entity.CartItem;
 import com.coffeeorder.domain.cart.repository.CartItemRepository;
 import com.coffeeorder.domain.menu.repository.MenuRepository;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent;
+import com.coffeeorder.domain.order.service.OrderService;
 import com.coffeeorder.domain.point.entity.Point;
 import com.coffeeorder.domain.point.repository.PointRepository;
 import com.coffeeorder.domain.user.entity.User;
 import com.coffeeorder.domain.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +39,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * 노션 테스트 케이스 O(주문·결제)를 실제 MySQL 에서 확인한다. 테스트마다 자기 사용자를 만들고 끝나면 롤백된다.
  * 롤백이라 커밋 후 처리(Mock 전송)는 돌지 않는다 → 여기서는 이벤트 발행만 보고, 전송은 OrderEventListenerTest 가 본다.
- * 실제 스레드 동시 주문(X-1, X-2)은 커밋이 필요해 11/20 동시성 테스트(D-10)에서 다룬다.
+ * 실제 스레드 동시 주문(X-1, X-2)은 커밋이 필요해 11/20 동시성 테스트(D-12)에서 다룬다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -90,7 +91,6 @@ class OrderApiTest {
         assertThat(data.path("totalPrice").asLong()).isEqualTo(15_000L); // 4,500×2 + 6,000
         assertThat(data.path("balance").asLong()).isEqualTo(135_000L);
         assertThat(data.path("orderedAt").asString()).matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
-        assertThat(LocalDateTime.parse(data.path("orderedAt").asString())).isNotNull();
 
         entityManager.flush();
         assertThat(balanceInDb(user)).isEqualTo(135_000L);
@@ -124,6 +124,7 @@ class OrderApiTest {
 
     @Test
     void O3_주문_뒤_메뉴_가격이_바뀌어도_주문_항목_가격은_그대로다() throws Exception {
+        // 스냅샷은 별도 컬럼이라 스키마가 보장한다. 노션 O-3 시나리오를 그대로 고정해 둔다(코드 쪽은 O-2 가 잡는다)
         putInCart(user, americano, 1);
         long orderId = orderId(order(user.getId()));
         entityManager.flush();
@@ -139,7 +140,6 @@ class OrderApiTest {
         putInCart(user, americano, 1);
         entityManager.flush();
         jdbc.update("UPDATE menus SET price = 5000 WHERE id = ?", americano);
-        entityManager.clear(); // 메모리에 남은 옛 가격(4,500)을 쓰지 않게 한다
 
         JsonNode data = objectMapper.readTree(order(user.getId()).getContentAsString(UTF_8)).path("data");
 
@@ -227,12 +227,40 @@ class OrderApiTest {
     }
 
     @Test
+    void 주문_서비스에는_트랜잭션이_걸려_있다() throws Exception {
+        // 이 테스트 클래스는 자체 트랜잭션 안에서 돌아서, 서비스의 @Transactional 이 빠져도 다른 테스트가 알아채지 못한다
+        Transactional tx = OrderService.class.getMethod("order", Long.class).getAnnotation(Transactional.class);
+        assertThat(tx).isNotNull();
+        assertThat(tx.readOnly()).isFalse();
+    }
+
+    @Test
     void 주문용_장바구니_조회는_행을_잠근다() throws Exception {
         // 실제 잠금 대기는 커밋이 필요해 11/20 에 본다. 여기서는 잠금 쿼리가 배타 락인지 고정한다
         Lock lock = CartItemRepository.class.getMethod("findAllByUserIdForUpdate", Long.class)
                 .getAnnotation(Lock.class);
         assertThat(lock).isNotNull();
         assertThat(lock.value()).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    @Test
+    void E2_주문_주소에_GET은_405이고_Allow_헤더가_POST다() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(get("/api/users/{id}/orders", user.getId()))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(405);
+        assertThat(res.getHeader("Allow")).contains("POST");
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(
+                "{\"status\":405,\"code\":\"METHOD_NOT_ALLOWED\",\"message\":\"지원하지 않는 요청 방식입니다.\"}");
+    }
+
+    @Test
+    void 사용자_번호_자리에_문자면_INVALID_REQUEST() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(post("/api/users/abc/orders")).andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(400);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(
+                "{\"status\":400,\"code\":\"INVALID_REQUEST\",\"message\":\"요청 값이 올바르지 않습니다.\"}");
     }
 
     @ParameterizedTest

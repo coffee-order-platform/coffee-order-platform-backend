@@ -20,7 +20,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * 스프링은 q=0 을 거절로 보지 않아, 이 설정이 없으면 충전·담기 등을 실행하고 JSON 으로 응답해 버린다.
  * HTTP 표준(RFC 9110)대로 "받지 않겠다"는 요청은 실행하지 않는다(11/18 결정).
  * 모든 API 가 JSON 만 응답하므로 조회 API 에도 똑같이 적용한다(OPTIONS 는 허용 메서드 안내라 제외).
- * application/xml 처럼 JSON 이 아예 없는 Accept 는 produces 가 있는 컨트롤러(포인트·장바구니)에서 실행 전에 406 이 된다.
+ * application/xml 처럼 JSON 이 아예 없는 Accept 는 produces 가 있는 컨트롤러(포인트·장바구니·주문)에서 실행 전에 406 이 된다.
  */
 @Configuration
 public class JsonAcceptConfig implements WebMvcConfigurer {

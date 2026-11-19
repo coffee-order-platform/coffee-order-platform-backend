@@ -31,7 +31,7 @@ class JsonAcceptConfigTest {
             "application/xml;q=0, application/json", "text/html;q=0, */*", "application/xml;q=0",
             "application/json;Q=1", "application/json;Q=0.5"})
     void JSON_을_받거나_판단할_수_없으면_false(String accept) {
-        // application/xml 처럼 JSON 이 없는 경우는 스프링에 맡긴다: produces 가 있는 포인트·장바구니는 실행 전 406,
+        // application/xml 처럼 JSON 이 없는 경우는 스프링에 맡긴다: produces 가 있는 포인트·장바구니·주문은 실행 전 406,
         // produces 가 없는 메뉴 조회는 응답을 만들 때 406(조회라 바뀌는 데이터 없음)
         assertThat(JsonAcceptConfig.refusesJson(accept)).isFalse();
     }
