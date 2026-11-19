@@ -43,7 +43,7 @@ class PopularMenuServiceTest {
     @Test
     void 판매_수량이_많은_순이고_상위_3개까지다() {
         givenSums(new LinkedHashMap<>(), 1L, 1L, 2L, 5L, 3L, 3L, 4L, 4L);
-        givenMenus(2L, 3L, 4L);
+        givenMenus(1L, 2L, 3L, 4L); // 4개 모두 있어서, 1번이 빠지는 이유가 "DB 에 없음"이 아니라 3개 제한뿐이다
 
         assertThat(service.getTop3()).extracting(PopularMenuResponse::menuId, PopularMenuResponse::salesCount)
                 .containsExactly(tuple(2L, 5L),
@@ -60,12 +60,12 @@ class PopularMenuServiceTest {
 
     @Test
     void DB_에_없는_메뉴는_건너뛰고_순위는_1부터_이어진다() {
-        // Redis 에만 남은 옛 메뉴 ID 가 1위여도 응답이 깨지지 않고, 나머지가 1위부터 붙는다
-        givenSums(new LinkedHashMap<>(), 99L, 10L, 1L, 5L, 2L, 3L);
-        givenMenus(1L, 2L);
+        // Redis 에만 남은 옛 메뉴 ID 가 1위여도 응답이 깨지지 않고, 나머지가 1위부터 붙어 3개를 채운다
+        givenSums(new LinkedHashMap<>(), 99L, 10L, 1L, 5L, 2L, 3L, 3L, 2L);
+        givenMenus(1L, 2L, 3L);
 
         assertThat(service.getTop3()).extracting(PopularMenuResponse::rank, PopularMenuResponse::menuId)
-                .containsExactly(tuple(1, 1L), tuple(2, 2L));
+                .containsExactly(tuple(1, 1L), tuple(2, 2L), tuple(3, 3L));
     }
 
     // ---- 도우미 ----

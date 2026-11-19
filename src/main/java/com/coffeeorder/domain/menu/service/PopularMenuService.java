@@ -35,13 +35,17 @@ public class PopularMenuService {
                 .entrySet().stream()
                 .filter(entry -> entry.getValue() > 0)
                 .sorted(Map.Entry.<Long, Long>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
-                .limit(TOP)
                 .toList();
+        // 3개로 자르기 전에 DB 에 있는 메뉴만 남긴다 — 없는 메뉴가 상위에 있어도 다음 메뉴로 3개를 채운다(코드래빗 #9).
+        // 후보는 7일 동안 팔린 메뉴 전부지만 메뉴 수가 적어 한 번의 IN 조회로 충분하다
         Map<Long, Menu> menus = menuRepository.findAllById(ranked.stream().map(Map.Entry::getKey).toList()).stream()
                 .collect(Collectors.toMap(Menu::getId, Function.identity()));
 
         List<PopularMenuResponse> result = new ArrayList<>();
         for (Map.Entry<Long, Long> entry : ranked) {
+            if (result.size() == TOP) {
+                break;
+            }
             Menu menu = menus.get(entry.getKey());
             if (menu != null) { // 메뉴 삭제 API 는 없지만, Redis 에 남은 옛 ID 가 응답을 깨지 않게 한다
                 result.add(PopularMenuResponse.of(result.size() + 1, menu, entry.getValue()));
