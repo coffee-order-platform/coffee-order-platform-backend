@@ -11,7 +11,8 @@ spring:
     redis:
       host: localhost
       port: ${REDIS_PORT:6379}
-      # Redis 가 응답하지 않을 때 기다리는 최대 시간. 주문 커밋 후 인기 메뉴 반영이 이만큼 늦어질 수 있다.
+      # Redis 명령 하나의 응답을 기다리는 최대 시간(접속 대기는 별도 connect-timeout).
+      # 주문 커밋 후 인기 메뉴 반영은 명령을 (메뉴 수 + 1)번 보내므로, Redis 가 느려지면 주문 응답이 최대 그 배수만큼 늦어진다.
       # 코드 수정 없이 환경변수로 늘리거나 줄인다(11/19 결정, 기본 2초)
       timeout: ${REDIS_TIMEOUT:2s}
   jackson:

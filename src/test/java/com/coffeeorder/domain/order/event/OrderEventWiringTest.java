@@ -9,6 +9,7 @@ import com.coffeeorder.domain.order.event.OrderCompletedEvent.OrderedMenu;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,9 +37,10 @@ class OrderEventWiringTest {
     @Autowired TransactionTemplate transactionTemplate;
     @Autowired StringRedisTemplate redisTemplate;
 
+    @BeforeEach
     @AfterEach
     void 테스트_키_삭제() {
-        redisTemplate.delete(KEY);
+        redisTemplate.delete(KEY); // 강제 종료로 남은 키가 다음 실행의 점수를 바꾸지 않게 앞뒤로 지운다
     }
 
     @Test

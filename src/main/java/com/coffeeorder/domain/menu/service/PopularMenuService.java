@@ -13,7 +13,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -29,8 +28,8 @@ public class PopularMenuService {
     /**
      * 최근 7일 판매 수량 합계 상위 3개. 동점이면 메뉴 ID 가 작은 순, 판매가 3개 미만이면 있는 만큼(노션 5-4).
      * 환불로 합계가 0 이 된 메뉴는 팔린 것이 아니므로 뺀다. Redis 장애는 그대로 던져 500 이 된다(이번 주 결정).
+     * 트랜잭션을 걸지 않는다 — Redis 를 읽는 동안 DB 연결을 잡고 있지 않게(메뉴 조회는 저장소가 자체 트랜잭션으로 한다).
      */
-    @Transactional(readOnly = true)
     public List<PopularMenuResponse> getTop3() {
         List<Map.Entry<Long, Long>> ranked = popularMenuRepository.sumRecent(LocalDate.now(clock), RECENT_DAYS)
                 .entrySet().stream()

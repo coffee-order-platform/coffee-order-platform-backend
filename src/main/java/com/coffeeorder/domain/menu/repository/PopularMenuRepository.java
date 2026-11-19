@@ -30,7 +30,11 @@ public class PopularMenuRepository {
         return KEY_PREFIX + date.format(KEY_DATE);
     }
 
-    /** 그 날짜 키에 메뉴별 판매 수량을 더한다. ZINCRBY 는 원자적이라 동시 주문이 겹쳐도 수량이 사라지지 않는다. */
+    /**
+     * 그 날짜 키에 메뉴별 판매 수량을 더한다. ZINCRBY 는 원자적이라 동시 주문이 겹쳐도 수량이 사라지지 않는다.
+     * 점수와 만료는 명령이 따로라, 그 사이 Redis 가 끊기면 만료 없는 키가 남을 수 있다. 같은 날 다음 주문이 만료를 다시 걸고,
+     * 조회는 7일치만 읽어 집계는 틀어지지 않는다(남는 것은 키 하나).
+     */
     public void increase(LocalDate date, Map<Long, Integer> quantities) {
         String key = key(date);
         quantities.forEach((menuId, quantity) ->
