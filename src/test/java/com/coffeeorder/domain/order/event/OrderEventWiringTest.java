@@ -13,7 +13,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 스프링 안에서 리스너가 빈으로 등록돼 커밋 뒤에만 전송되는지 확인한다(O-8, O-9).
+ * 스프링 안에서 리스너가 빈으로 등록돼 커밋되면 전송하고 롤백되면 보내지 않는지 확인한다(O-8, O-9).
+ * 실행 시점(AFTER_COMMIT, BEFORE_COMMIT 과 구분)은 OrderEventListenerTest 가 고정한다.
  * 이벤트만 발행하고 DB 에는 아무것도 쓰지 않아, 커밋해도 개발 DB 가 바뀌지 않는다.
  */
 @SpringBootTest

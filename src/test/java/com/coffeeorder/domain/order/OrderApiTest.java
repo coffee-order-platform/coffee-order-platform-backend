@@ -38,7 +38,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * 노션 테스트 케이스 O(주문·결제)를 실제 MySQL 에서 확인한다. 테스트마다 자기 사용자를 만들고 끝나면 롤백된다.
- * 롤백이라 커밋 후 처리(Mock 전송)는 돌지 않는다 → 여기서는 이벤트 발행만 보고, 전송은 OrderEventListenerTest 가 본다.
+ * 롤백이라 커밋 후 처리(Mock 전송)는 돌지 않는다 → 여기서는 이벤트 발행만 보고, 전송은 OrderEventListenerTest·OrderEventWiringTest 가 본다.
  * 실제 스레드 동시 주문(X-1, X-2)은 커밋이 필요해 11/20 동시성 테스트(D-12)에서 다룬다.
  */
 @SpringBootTest
