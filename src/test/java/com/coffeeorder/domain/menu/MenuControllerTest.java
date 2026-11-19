@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import com.coffeeorder.domain.menu.controller.MenuController;
 import com.coffeeorder.domain.menu.dto.MenuResponse;
 import com.coffeeorder.domain.menu.service.MenuService;
+import com.coffeeorder.domain.menu.service.PopularMenuService;
 import com.coffeeorder.global.exception.GlobalExceptionHandler;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class MenuControllerTest {
 
     private final MenuService menuService = mock(MenuService.class);
-    private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new MenuController(menuService))
+    private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new MenuController(menuService, mock(PopularMenuService.class)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 

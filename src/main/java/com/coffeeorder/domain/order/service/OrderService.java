@@ -8,6 +8,7 @@ import com.coffeeorder.domain.order.dto.OrderResponse;
 import com.coffeeorder.domain.order.entity.Order;
 import com.coffeeorder.domain.order.entity.OrderItem;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent;
+import com.coffeeorder.domain.order.event.OrderCompletedEvent.OrderedMenu;
 import com.coffeeorder.domain.order.repository.OrderItemRepository;
 import com.coffeeorder.domain.order.repository.OrderRepository;
 import com.coffeeorder.domain.point.entity.Point;
@@ -87,7 +88,9 @@ public class OrderService {
                 new PointHistory(point.getUser(), order, PointHistoryType.USE, totalPrice, point.getBalance()));
         cartItemRepository.deleteAll(cartItems); // 주문할 때 읽은 항목만 지운다
 
-        eventPublisher.publishEvent(new OrderCompletedEvent(order.getId(), userId, menuIds, totalPrice));
+        eventPublisher.publishEvent(new OrderCompletedEvent(order.getId(), userId,
+                cartItems.stream().map(item -> new OrderedMenu(item.getMenu().getId(), item.getQuantity())).toList(),
+                totalPrice, order.getCreatedAt()));
         return new OrderResponse(order.getId(), totalPrice, point.getBalance(), order.getCreatedAt(),
                 orderItems.stream().map(OrderResponse.Item::from).toList());
     }

@@ -1,7 +1,9 @@
 package com.coffeeorder.domain.menu.controller;
 
 import com.coffeeorder.domain.menu.dto.MenuResponse;
+import com.coffeeorder.domain.menu.dto.PopularMenuResponse;
 import com.coffeeorder.domain.menu.service.MenuService;
+import com.coffeeorder.domain.menu.service.PopularMenuService;
 import com.coffeeorder.global.common.ApiResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -15,9 +17,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class MenuController {
 
     private final MenuService menuService;
+    private final PopularMenuService popularMenuService;
 
     @GetMapping
     public ApiResponse<List<MenuResponse>> findAll() {
         return ApiResponse.ok("메뉴 목록 조회 성공", menuService.findAll());
+    }
+
+    @GetMapping("/popular")
+    public ApiResponse<List<PopularMenuResponse>> findPopular() {
+        return ApiResponse.ok("인기 메뉴 조회 성공", popularMenuService.getTop3());
     }
 }

@@ -2,6 +2,7 @@ package com.coffeeorder.domain.order;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
@@ -9,6 +10,7 @@ import com.coffeeorder.domain.cart.entity.CartItem;
 import com.coffeeorder.domain.cart.repository.CartItemRepository;
 import com.coffeeorder.domain.menu.repository.MenuRepository;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent;
+import com.coffeeorder.domain.order.event.OrderCompletedEvent.OrderedMenu;
 import com.coffeeorder.domain.order.service.OrderService;
 import com.coffeeorder.domain.point.entity.Point;
 import com.coffeeorder.domain.point.repository.PointRepository;
@@ -16,6 +18,8 @@ import com.coffeeorder.domain.user.entity.User;
 import com.coffeeorder.domain.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -205,8 +209,17 @@ class OrderApiTest {
 
         long orderId = orderId(order(user.getId()));
 
-        assertThat(events.stream(OrderCompletedEvent.class))
-                .containsExactly(new OrderCompletedEvent(orderId, user.getId(), List.of(americano, cloudLatte), 15_000L));
+        List<OrderCompletedEvent> published = events.stream(OrderCompletedEvent.class).toList();
+        assertThat(published).hasSize(1);
+        OrderCompletedEvent event = published.get(0);
+        assertThat(event.orderId()).isEqualTo(orderId);
+        assertThat(event.userId()).isEqualTo(user.getId());
+        // 인기 메뉴는 판매 수량만큼 더하므로 수량까지 담는다
+        assertThat(event.menus()).containsExactly(new OrderedMenu(americano, 2), new OrderedMenu(cloudLatte, 1));
+        assertThat(event.totalPrice()).isEqualTo(15_000L);
+        // 인기 메뉴 날짜 키는 주문 시각으로 정한다(응답의 orderedAt 과 같은 값)
+        assertThat(event.orderedAt()).isCloseTo(jdbc.queryForObject( // DB 는 마이크로초로 반올림해 저장한다
+                "SELECT created_at FROM orders WHERE id = ?", LocalDateTime.class, orderId), within(1, ChronoUnit.MILLIS));
     }
 
     @Test

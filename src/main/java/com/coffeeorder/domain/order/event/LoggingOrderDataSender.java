@@ -11,6 +11,6 @@ public class LoggingOrderDataSender implements OrderDataSender {
     @Override
     public void send(OrderCompletedEvent event) {
         log.info("주문 데이터 전송: orderId={}, userId={}, menuIds={}, amount={}",
-                event.orderId(), event.userId(), event.menuIds(), event.totalPrice());
+                event.orderId(), event.userId(), event.menuIds(), event.totalPrice()); // 주문당 1회: 사용자·메뉴 ID·금액
     }
 }
