@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.coffeeorder.domain.cart.entity.CartItem;
 import com.coffeeorder.domain.cart.repository.CartItemRepository;
@@ -263,12 +264,12 @@ class OrderApiTest {
     }
 
     @Test
-    void E2_주문_주소에_GET은_405이고_Allow_헤더가_POST다() throws Exception {
-        MockHttpServletResponse res = mockMvc.perform(get("/api/users/{id}/orders", user.getId()))
+    void E2_주문_주소에_PUT은_405이고_Allow_헤더가_GET_POST다() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(put("/api/users/{id}/orders", user.getId()))
                 .andReturn().getResponse();
 
         assertThat(res.getStatus()).isEqualTo(405);
-        assertThat(res.getHeader("Allow")).contains("POST");
+        assertThat(res.getHeader("Allow")).contains("GET").contains("POST");
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(
                 "{\"status\":405,\"code\":\"METHOD_NOT_ALLOWED\",\"message\":\"지원하지 않는 요청 방식입니다.\"}");
     }
@@ -297,7 +298,116 @@ class OrderApiTest {
         assertThat(orderCount(user)).isZero();
     }
 
+    // ---- 주문 조회 (11/20) ----
+
+    @Test
+    void 주문_목록은_최신순_커서로_나뉘고_내_주문만_나온다() throws Exception {
+        long first = placeOrder(user, americano, 1);
+        long second = placeOrder(user, cloudLatte, 1);
+        long third = placeOrder(user, americano, 2);
+        placeOrder(createUser("남의주문", 10_000), americano, 1);
+
+        JsonNode page1 = body(mockMvc.perform(get("/api/users/{id}/orders", user.getId()).param("size", "2")));
+        assertThat(page1.path("message").isNull()).isTrue(); // 조회는 message 가 null(칸은 남김, 11/20)
+        JsonNode data1 = page1.path("data");
+        assertThat(data1.path("content").get(0).propertyNames())
+                .containsExactly("orderId", "totalPrice", "status", "orderedAt");
+        assertThat(data1.path("content").findValuesAsString("orderId")).containsExactly("" + third, "" + second);
+        assertThat(data1.path("content").get(0).path("totalPrice").asLong()).isEqualTo(9_000L);
+        assertThat(data1.path("content").get(0).path("status").asString()).isEqualTo("PAID");
+        assertThat(data1.path("hasNext").asBoolean()).isTrue();
+        assertThat(data1.path("nextCursor").asLong()).isEqualTo(second);
+
+        JsonNode data2 = body(mockMvc.perform(get("/api/users/{id}/orders", user.getId())
+                .param("size", "2").param("cursor", "" + second))).path("data");
+        assertThat(data2.path("content").findValuesAsString("orderId")).containsExactly("" + first);
+        assertThat(data2.path("hasNext").asBoolean()).isFalse();
+        assertThat(data2.path("nextCursor").isNull()).isTrue();
+    }
+
+    @Test
+    void 주문이_없으면_빈_목록이다() throws Exception {
+        JsonNode data = body(mockMvc.perform(get("/api/users/{id}/orders", user.getId()))).path("data");
+
+        assertThat(data.path("content").isEmpty()).isTrue();
+        assertThat(data.path("hasNext").asBoolean()).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"size=0", "size=101", "cursor=0"})
+    void 주문_목록_size_cursor_범위_밖은_INVALID_REQUEST(String query) throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(get("/api/users/{id}/orders?" + query, user.getId()))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(400);
+        assertThat(res.getContentAsString(UTF_8)).contains("\"code\":\"INVALID_REQUEST\"");
+    }
+
+    @Test
+    void 남의_주문_번호를_커서로_쓰면_INVALID_REQUEST() throws Exception {
+        long othersOrder = placeOrder(createUser("남의주문", 10_000), americano, 1);
+
+        MockHttpServletResponse res = mockMvc.perform(get("/api/users/{id}/orders", user.getId())
+                .param("cursor", "" + othersOrder)).andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(400);
+        assertThat(res.getContentAsString(UTF_8)).contains("\"code\":\"INVALID_REQUEST\"");
+    }
+
+    @Test
+    void 없는_사용자의_주문_목록은_USER_NOT_FOUND() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(get("/api/users/{id}/orders", Long.MAX_VALUE))
+                .andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(404);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(USER_NOT_FOUND);
+    }
+
+    @Test
+    void 주문_단건은_항목을_담은_순서로_돌려준다() throws Exception {
+        putInCart(user, cloudLatte, 1);
+        putInCart(user, americano, 2);
+        long orderId = orderId(order(user.getId()));
+
+        JsonNode data = body(mockMvc.perform(get("/api/users/{id}/orders/{orderId}", user.getId(), orderId)))
+                .path("data");
+
+        assertThat(data.propertyNames()).containsExactly("orderId", "totalPrice", "status", "orderedAt", "items");
+        assertThat(data.path("orderId").asLong()).isEqualTo(orderId);
+        assertThat(data.path("totalPrice").asLong()).isEqualTo(15_000L);
+        assertThat(data.path("status").asString()).isEqualTo("PAID");
+        assertThat(data.path("orderedAt").asString()).matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
+        assertThat(data.path("items").toString()).isEqualTo("["
+                + "{\"menuId\":" + cloudLatte + ",\"menuName\":\"폭신폭신 구름과자 라떼\",\"unitPrice\":6000,\"quantity\":1,\"linePrice\":6000},"
+                + "{\"menuId\":" + americano + ",\"menuName\":\"아메리카노\",\"unitPrice\":4500,\"quantity\":2,\"linePrice\":9000}]");
+    }
+
+    @Test
+    void 남의_주문과_없는_주문은_똑같이_ORDER_NOT_FOUND() throws Exception {
+        long othersOrder = placeOrder(createUser("남의주문", 10_000), americano, 1);
+
+        for (long orderId : new long[] {othersOrder, Long.MAX_VALUE}) {
+            MockHttpServletResponse res = mockMvc.perform(
+                    get("/api/users/{id}/orders/{orderId}", user.getId(), orderId)).andReturn().getResponse();
+
+            assertThat(res.getStatus()).isEqualTo(404);
+            assertThat(res.getContentAsString(UTF_8)).isEqualTo(
+                    "{\"status\":404,\"code\":\"ORDER_NOT_FOUND\",\"message\":\"주문을 찾을 수 없습니다.\"}");
+        }
+    }
+
     // ---- 도우미 ----
+
+    private long placeOrder(User owner, long menuId, int quantity) throws Exception {
+        putInCart(owner, menuId, quantity);
+        return orderId(order(owner.getId()));
+    }
+
+    private JsonNode body(org.springframework.test.web.servlet.ResultActions result) throws Exception {
+        MockHttpServletResponse res = result.andReturn().getResponse();
+        assertThat(res.getStatus()).isEqualTo(200);
+        return objectMapper.readTree(res.getContentAsString(UTF_8));
+    }
 
     private User createUser(String name, long balance) {
         User created = userRepository.saveAndFlush(new User(name));
