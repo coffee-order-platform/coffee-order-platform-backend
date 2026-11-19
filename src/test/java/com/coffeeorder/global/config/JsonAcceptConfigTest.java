@@ -16,7 +16,8 @@ class JsonAcceptConfigTest {
             "application/json;q=0, */*", "*/*, application/json;q=0", "application/*, application/json;q=0",
             "application/*;q=0, */*", "application/json, application/json;q=0", "application/json;q=0, application/json",
             "application/json;q=abc", "application/json;q=2", "application/json;Q=abc", "application/json;Q=2",
-            "application/json;Q=-1", "application/json;Q=NaN", "application/xml, application/json;Q=1.5"})
+            "application/json;Q=-1", "application/json;Q=NaN", "application/xml, application/json;Q=1.5",
+            "application/xml;Q=2, application/json"})
     void JSON_을_q0_으로_거절하거나_q_가_깨졌으면_true(String accept) {
         assertThat(JsonAcceptConfig.refusesJson(accept)).isTrue();
     }

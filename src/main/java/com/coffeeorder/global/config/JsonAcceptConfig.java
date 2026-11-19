@@ -54,7 +54,9 @@ public class JsonAcceptConfig implements WebMvcConfigurer {
         List<MediaType> ranges;
         try {
             ranges = MediaType.parseMediaTypes(accept);
-            // 대문자 Q 는 스프링이 범위를 검사하지 않아 Q=2 가 통과하고 Q=abc 는 숫자 변환 오류(500)가 난다
+            // 대문자 Q 는 스프링이 읽을 때 범위를 검사하지 않아, 그냥 두면 Q=2·Q=abc 모두 컨트롤러 실행 뒤 응답을 쓰다 500 이 난다.
+            // 범위가 2개 이상이면서 Q=abc 처럼 깨진 경우(json;Q=abc, */*)는 스프링이 여기 전후에 같은 값을 다시 읽다
+            // 500 을 낸다(실행 전이라 데이터는 바뀌지 않음). 막으려면 스프링 앞단 필터가 필요해 미룸(V2 메모 D-11)
             if (ranges.stream().anyMatch(range -> !(range.getQualityValue() >= 0 && range.getQualityValue() <= 1))) {
                 return true;
             }
