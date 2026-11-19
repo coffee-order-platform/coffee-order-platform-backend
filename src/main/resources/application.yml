@@ -15,6 +15,9 @@ spring:
     deserialization:
       # 금액·수량 같은 정수 칸에 소수(1000.5)가 오면 잘라 받지 않고 400 INVALID_REQUEST 로 거절한다
       accept-float-as-int: false
+    mapper:
+      # 따옴표로 감싼 숫자("5")를 숫자로 바꿔 받지 않고 400 INVALID_REQUEST 로 거절한다(11/18 결정)
+      allow-coercion-of-scalars: false
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:update}

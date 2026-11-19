@@ -32,6 +32,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -119,8 +120,8 @@ class PointApiTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "{}", "{\"amount\":null}", "{\"amount\":\"abc\"}", "{\"amount\":",
-            "{\"amount\":1000.5}", "{\"amount\":1000.0}"})
-    void C6_E4_금액_누락_문자_깨진_JSON_소수는_INVALID_REQUEST(String body) throws Exception {
+            "{\"amount\":1000.5}", "{\"amount\":1000.0}", "{\"amount\":\"5000\"}"})
+    void C6_E4_금액_누락_문자_깨진_JSON_소수_따옴표_숫자는_INVALID_REQUEST(String body) throws Exception {
         MockHttpServletResponse res = charge(user.getId(), body);
 
         assertThat(res.getStatus()).isEqualTo(400);
@@ -128,11 +129,14 @@ class PointApiTest {
         assertThat(balanceInDb()).isEqualTo(150_000L);
     }
 
-    @Test
-    void JSON_응답을_받지_않는_충전_요청은_충전하지_않는다() throws Exception {
-        // produces 가 없으면 충전이 먼저 커밋되고 응답 변환에서 실패해 이중 충전 위험이 생긴다
+    @ParameterizedTest
+    @ValueSource(strings = {"application/xml", "application/json;q=0", "application/json;q=0, */*", "*/*;q=0",
+            "application/json;q=abc", "application/json;Q=abc", "application/json;Q=2"})
+    void JSON_응답을_받지_않는_충전_요청은_충전하지_않는다(String accept) throws Exception {
+        // produces 가 없으면 충전이 먼저 커밋되고 응답 변환에서 실패해 이중 충전 위험이 생긴다(application/xml).
+        // q=0 은 "받지 않겠다"는 뜻이라 JsonAcceptConfig 가 실행 전에 막는다(없으면 충전 후 JSON 으로 응답해 버린다)
         MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/points/charge", user.getId())
-                        .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_XML)
+                        .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.ACCEPT, accept)
                         .content("{\"amount\":1000}"))
                 .andReturn().getResponse();
 

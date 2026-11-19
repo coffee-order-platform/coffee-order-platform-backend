@@ -1,0 +1,76 @@
+package com.coffeeorder.global.config;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.util.Collections;
+import java.util.List;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+/**
+ * Accept 가 JSON 을 q=0(= 받지 않겠다)으로 거절하면 컨트롤러 실행 전에 406 NOT_ACCEPTABLE 로 막는다.
+ * 스프링은 q=0 을 거절로 보지 않아, 이 설정이 없으면 충전·담기 등을 실행하고 JSON 으로 응답해 버린다.
+ * HTTP 표준(RFC 9110)대로 "받지 않겠다"는 요청은 실행하지 않는다(11/18 결정).
+ * 모든 API 가 JSON 만 응답하므로 조회 API 에도 똑같이 적용한다(OPTIONS 는 허용 메서드 안내라 제외).
+ * application/xml 처럼 JSON 이 아예 없는 Accept 는 produces 가 있는 컨트롤러(포인트·장바구니)에서 실행 전에 406 이 된다.
+ */
+@Configuration
+public class JsonAcceptConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new HandlerInterceptor() {
+            @Override
+            public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+                    throws HttpMediaTypeNotAcceptableException {
+                // Accept 가 여러 줄로 오면 스프링은 모두 이어 보므로 여기서도 전부 이어 본다(첫 줄만 보면 우회된다)
+                String accept = String.join(",", Collections.list(request.getHeaders(HttpHeaders.ACCEPT)));
+                if (handler instanceof HandlerMethod && !HttpMethod.OPTIONS.matches(request.getMethod())
+                        && refusesJson(accept)) {
+                    throw new HttpMediaTypeNotAcceptableException(List.of(MediaType.APPLICATION_JSON));
+                }
+                return true;
+            }
+        });
+    }
+
+    /**
+     * JSON 에 적용되는 가장 구체적인 범위(application/json, 그다음 application/*, 그다음 모든 형식)의 q 가 0 이면 거절(RFC 9110).
+     * 같은 구체도의 범위가 여럿이면(예: "application/json, application/json;q=0") 순서와 상관없이 하나라도 q=0 이면 거절한다.
+     * q 가 숫자가 아니거나 0~1 밖이면(대소문자 무관) 깨진 Accept 로 보고 거절한다.
+     */
+    static boolean refusesJson(String accept) {
+        if (accept == null || accept.isBlank()) {
+            return false;
+        }
+        List<MediaType> ranges;
+        try {
+            ranges = MediaType.parseMediaTypes(accept);
+            // 대문자 Q 는 스프링이 읽을 때 범위를 검사하지 않아, 그냥 두면 Q=2·Q=abc 모두 컨트롤러 실행 뒤 응답을 쓰다 500 이 난다.
+            // 범위가 2개 이상이면서 Q=abc 처럼 깨진 경우(json;Q=abc, */*)는 스프링이 여기 전후에 같은 값을 다시 읽다
+            // 500 을 낸다(실행 전이라 데이터는 바뀌지 않음). 막으려면 스프링 앞단 필터가 필요해 미룸(V2 메모 D-11)
+            if (ranges.stream().anyMatch(range -> !(range.getQualityValue() >= 0 && range.getQualityValue() <= 1))) {
+                return true;
+            }
+        } catch (InvalidMediaTypeException | NumberFormatException e) {
+            return true; // 깨진 Accept(q=abc, Q=abc, q=2 등)는 실행 전에 406 으로 거절한다
+        }
+        List<MediaType> jsonRanges = ranges.stream().filter(range -> range.includes(MediaType.APPLICATION_JSON)).toList();
+        int mostSpecific = jsonRanges.stream().mapToInt(JsonAcceptConfig::rank).min().orElse(-1);
+        return jsonRanges.stream()
+                .anyMatch(range -> rank(range) == mostSpecific && range.getQualityValue() == 0);
+    }
+
+    /** 0 = application/json, 1 = application/*, 2 = 모든 형식. 작을수록 구체적이다. */
+    private static int rank(MediaType range) {
+        return range.isWildcardType() ? 2 : range.isWildcardSubtype() ? 1 : 0;
+    }
+}
