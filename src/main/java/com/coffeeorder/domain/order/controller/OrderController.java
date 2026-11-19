@@ -20,7 +20,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 요청 본문 없이 장바구니 전체를 주문한다. 새 주문이 생기므로 201(노션 5-3). produces 고정 이유는 PointController 참고. */
+/**
+ * 주문(POST, 장바구니 전체, 새 주문이 생기므로 201 — 노션 5-3)과 주문 조회(GET 목록·단건, 200, message null).
+ * produces 고정 이유는 PointController 참고.
+ */
 @RestController
 @RequestMapping(value = "/api/users/{userId}/orders", produces = MediaType.APPLICATION_JSON_VALUE)
 @RequiredArgsConstructor

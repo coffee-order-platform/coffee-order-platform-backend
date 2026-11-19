@@ -302,10 +302,13 @@ class OrderApiTest {
 
     @Test
     void 주문_목록은_최신순_커서로_나뉘고_내_주문만_나온다() throws Exception {
+        // 남의 주문을 1쪽(가장 최신)과 2쪽(커서 아래) 양쪽에 끼워, 두 쿼리 모두 소유자 조건이 빠지면 섞여 나온다
+        User other = createUser("남의주문", 20_000);
         long first = placeOrder(user, americano, 1);
+        placeOrder(other, americano, 1);
         long second = placeOrder(user, cloudLatte, 1);
         long third = placeOrder(user, americano, 2);
-        placeOrder(createUser("남의주문", 10_000), americano, 1);
+        placeOrder(other, americano, 1);
 
         JsonNode page1 = body(mockMvc.perform(get("/api/users/{id}/orders", user.getId()).param("size", "2")));
         assertThat(page1.path("message").isNull()).isTrue(); // 조회는 message 가 null(칸은 남김, 11/20)
@@ -315,6 +318,8 @@ class OrderApiTest {
         assertThat(data1.path("content").findValuesAsString("orderId")).containsExactly("" + third, "" + second);
         assertThat(data1.path("content").get(0).path("totalPrice").asLong()).isEqualTo(9_000L);
         assertThat(data1.path("content").get(0).path("status").asString()).isEqualTo("PAID");
+        assertThat(data1.path("content").get(0).path("orderedAt").asString())
+                .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
         assertThat(data1.path("hasNext").asBoolean()).isTrue();
         assertThat(data1.path("nextCursor").asLong()).isEqualTo(second);
 
@@ -355,12 +360,13 @@ class OrderApiTest {
     }
 
     @Test
-    void 없는_사용자의_주문_목록은_USER_NOT_FOUND() throws Exception {
-        MockHttpServletResponse res = mockMvc.perform(get("/api/users/{id}/orders", Long.MAX_VALUE))
-                .andReturn().getResponse();
+    void 없는_사용자의_주문_목록_단건은_USER_NOT_FOUND() throws Exception {
+        for (String url : new String[] {"/api/users/{id}/orders", "/api/users/{id}/orders/1"}) {
+            MockHttpServletResponse res = mockMvc.perform(get(url, Long.MAX_VALUE)).andReturn().getResponse();
 
-        assertThat(res.getStatus()).isEqualTo(404);
-        assertThat(res.getContentAsString(UTF_8)).isEqualTo(USER_NOT_FOUND);
+            assertThat(res.getStatus()).isEqualTo(404);
+            assertThat(res.getContentAsString(UTF_8)).isEqualTo(USER_NOT_FOUND);
+        }
     }
 
     @Test
@@ -368,6 +374,8 @@ class OrderApiTest {
         putInCart(user, cloudLatte, 1);
         putInCart(user, americano, 2);
         long orderId = orderId(order(user.getId()));
+        entityManager.flush();
+        entityManager.clear(); // 운영처럼 새로 읽게 한다(메뉴가 지연 로딩 프록시인 경로)
 
         JsonNode data = body(mockMvc.perform(get("/api/users/{id}/orders/{orderId}", user.getId(), orderId)))
                 .path("data");
