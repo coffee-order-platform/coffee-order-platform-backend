@@ -71,7 +71,7 @@ public class OrderService {
         }
 
         Order order = orderRepository.save(new Order(point.getUser(), totalPrice));
-        orderItemRepository.saveAll(cartItems.stream().map(item -> {
+        List<OrderItem> orderItems = orderItemRepository.saveAll(cartItems.stream().map(item -> {
             Menu menu = menus.get(item.getMenu().getId());
             return new OrderItem(order, menu, menu.getName(), menu.getPrice(), item.getQuantity(),
                     menu.getPrice() * item.getQuantity());
@@ -82,6 +82,7 @@ public class OrderService {
         cartItemRepository.deleteAll(cartItems); // 주문할 때 읽은 항목만 지운다
 
         eventPublisher.publishEvent(new OrderCompletedEvent(order.getId(), userId, menuIds, totalPrice));
-        return new OrderResponse(order.getId(), totalPrice, point.getBalance(), order.getCreatedAt());
+        return new OrderResponse(order.getId(), totalPrice, point.getBalance(), order.getCreatedAt(),
+                orderItems.stream().map(OrderResponse.Item::from).toList());
     }
 }

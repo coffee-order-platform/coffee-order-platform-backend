@@ -82,11 +82,16 @@ class OrderApiTest {
 
         MockHttpServletResponse res = order(user.getId());
 
-        assertThat(res.getStatus()).isEqualTo(200);
+        assertThat(res.getStatus()).isEqualTo(201);
         JsonNode body = objectMapper.readTree(res.getContentAsString(UTF_8));
+        assertThat(body.path("status").asInt()).isEqualTo(201); // 본문 status 와 HTTP 상태가 같아야 한다
         assertThat(body.path("message").asString()).isEqualTo("주문이 완료되었습니다.");
         JsonNode data = body.path("data");
-        assertThat(data.propertyNames()).containsExactly("orderId", "totalPrice", "balance", "orderedAt");
+        assertThat(data.propertyNames()).containsExactly("orderId", "totalPrice", "balance", "orderedAt", "items");
+        // 영수증: 장바구니가 비워지므로 주문 항목 스냅샷을 응답으로 돌려준다(담은 순서)
+        assertThat(data.path("items").toString()).isEqualTo("["
+                + "{\"menuId\":" + americano + ",\"menuName\":\"아메리카노\",\"unitPrice\":4500,\"quantity\":2,\"linePrice\":9000},"
+                + "{\"menuId\":" + cloudLatte + ",\"menuName\":\"폭신폭신 구름과자 라떼\",\"unitPrice\":6000,\"quantity\":1,\"linePrice\":6000}]");
         long orderId = data.path("orderId").asLong();
         assertThat(data.path("totalPrice").asLong()).isEqualTo(15_000L); // 4,500×2 + 6,000
         assertThat(data.path("balance").asLong()).isEqualTo(135_000L);
@@ -180,7 +185,7 @@ class OrderApiTest {
 
         MockHttpServletResponse res = order(exact.getId());
 
-        assertThat(res.getStatus()).isEqualTo(200);
+        assertThat(res.getStatus()).isEqualTo(201);
         assertThat(balanceInDb(exact)).isZero();
     }
 
@@ -295,7 +300,7 @@ class OrderApiTest {
     }
 
     private long orderId(MockHttpServletResponse res) throws Exception {
-        assertThat(res.getStatus()).isEqualTo(200);
+        assertThat(res.getStatus()).isEqualTo(201);
         return objectMapper.readTree(res.getContentAsString(UTF_8)).path("data").path("orderId").asLong();
     }
 
