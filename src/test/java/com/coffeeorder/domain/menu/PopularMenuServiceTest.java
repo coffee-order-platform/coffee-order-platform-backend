@@ -53,7 +53,7 @@ class PopularMenuServiceTest {
     @Test
     void 합계가_0_이하인_메뉴는_뺀다() {
         givenSums(new LinkedHashMap<>(), 1L, 0L, 2L, -1L, 3L, 1L);
-        givenMenus(3L);
+        givenMenus(1L, 2L, 3L); // 메뉴는 모두 있어서, 빠지는 이유가 "DB 에 없음"이 아니라 합계 0 이하뿐이다
 
         assertThat(service.getTop3()).extracting(PopularMenuResponse::menuId).containsExactly(3L);
     }
