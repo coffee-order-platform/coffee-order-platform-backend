@@ -20,6 +20,7 @@ import com.coffeeorder.global.exception.BusinessException;
 import com.coffeeorder.global.exception.ErrorCode;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -47,12 +48,17 @@ public class OrderService {
      */
     @Transactional
     public OrderResponse order(Long userId) {
-        if (!userRepository.existsById(userId)) {
-            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        // 락 조회를 맨 처음에 한다. 일반 조회(사용자 확인 등)를 먼저 하면 MySQL REPEATABLE READ 의 읽기 시점이
+        // 락을 잡기 전으로 고정돼, 뒤의 메뉴 조회가 락 대기 중 바뀐 가격을 보지 못한다(CodeRabbit PR #8).
+        // Point 를 처음 읽는 곳이기도 해야 한다(먼저 일반 조회하면 락 조회가 메모리의 옛 잔액을 돌려준다)
+        Optional<Point> lockedPoint = pointRepository.findByUserIdForUpdate(userId);
+        if (lockedPoint.isEmpty()) {
+            if (!userRepository.existsById(userId)) {
+                throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+            }
+            throw new IllegalStateException("포인트 행이 없는 사용자: " + userId);
         }
-        // 이 트랜잭션에서 Point 를 처음 읽는 곳이어야 한다(먼저 일반 조회하면 락 조회가 메모리의 옛 잔액을 돌려준다)
-        Point point = pointRepository.findByUserIdForUpdate(userId)
-                .orElseThrow(() -> new IllegalStateException("포인트 행이 없는 사용자: " + userId));
+        Point point = lockedPoint.get();
 
         List<CartItem> cartItems = cartItemRepository.findAllByUserIdForUpdate(userId);
         if (cartItems.isEmpty()) {
