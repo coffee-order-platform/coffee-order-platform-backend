@@ -8,6 +8,7 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+    base_branches: [".*"] # 쌓은 PR(대상이 main 이 아닌 PR)도 자동 리뷰
   path_filters:
     - "!**/build/**"
     - "!**/.gradle/**"
