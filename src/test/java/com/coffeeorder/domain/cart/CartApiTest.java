@@ -50,6 +50,8 @@ import org.springframework.transaction.annotation.Transactional;
 class CartApiTest {
 
     private static final String ADDED = "{\"status\":200,\"message\":\"장바구니에 담겼습니다.\",\"data\":null}";
+    private static final String NOT_ACCEPTABLE =
+            "{\"status\":406,\"code\":\"NOT_ACCEPTABLE\",\"message\":\"지원하지 않는 응답 형식입니다.\"}";
     private static final String REMOVED = "{\"status\":200,\"message\":\"장바구니에서 삭제되었습니다.\",\"data\":null}";
     private static final String INVALID_QUANTITY =
             "{\"status\":400,\"code\":\"INVALID_QUANTITY\",\"message\":\"수량이 올바르지 않습니다.\"}";
@@ -300,7 +302,7 @@ class CartApiTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"application/xml", "application/json;q=0", "application/json;q=0, */*", "*/*;q=0",
-            "application/json;q=abc"})
+            "application/json;q=abc", "application/json;Q=abc", "application/json;Q=2"})
     void JSON_응답을_받지_않는_담기는_실행하지_않는다(String accept) throws Exception {
         // q=0 은 "받지 않겠다"는 뜻이다. JSON 에 적용되는 가장 구체적인 범위의 q 가 0 이면 거절한다
         MockHttpServletResponse res = mockMvc.perform(post("/api/users/{id}/cart/items", userId)
@@ -309,6 +311,7 @@ class CartApiTest {
                 .andReturn().getResponse();
 
         assertThat(res.getStatus()).isEqualTo(406);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(NOT_ACCEPTABLE);
         assertThat(rowCount()).isZero();
     }
 
@@ -322,6 +325,7 @@ class CartApiTest {
                 .andReturn().getResponse();
 
         assertThat(res.getStatus()).isEqualTo(406);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(NOT_ACCEPTABLE);
         assertThat(rowCount()).isZero();
     }
 
@@ -338,7 +342,9 @@ class CartApiTest {
                 .andReturn().getResponse();
 
         assertThat(changed.getStatus()).isEqualTo(406);
+        assertThat(changed.getContentAsString(UTF_8)).isEqualTo(NOT_ACCEPTABLE);
         assertThat(removed.getStatus()).isEqualTo(406);
+        assertThat(removed.getContentAsString(UTF_8)).isEqualTo(NOT_ACCEPTABLE);
         assertThat(quantityInDb(americano)).isEqualTo(2);
     }
 
@@ -419,8 +425,9 @@ class CartApiTest {
         try {
             long before = stats.getPrepareStatementCount();
 
-            getCart(userId);
+            MockHttpServletResponse res = getCart(userId);
 
+            assertThat(res.getStatus()).isEqualTo(200); // 실패 응답이면 쿼리 수가 우연히 맞아도 의미 없다
             assertThat(stats.getPrepareStatementCount() - before).isEqualTo(2L); // 사용자 확인 1 + 항목·메뉴 함께 1
         } finally {
             stats.setStatisticsEnabled(wasEnabled);

@@ -45,6 +45,7 @@ public class JsonAcceptConfig implements WebMvcConfigurer {
     /**
      * JSON 에 적용되는 가장 구체적인 범위(application/json, 그다음 application/*, 그다음 모든 형식)의 q 가 0 이면 거절(RFC 9110).
      * 같은 구체도의 범위가 여럿이면(예: "application/json, application/json;q=0") 순서와 상관없이 하나라도 q=0 이면 거절한다.
+     * q 가 숫자가 아니거나 0~1 밖이면(대소문자 무관) 깨진 Accept 로 보고 거절한다.
      */
     static boolean refusesJson(String accept) {
         if (accept == null || accept.isBlank()) {
@@ -53,8 +54,12 @@ public class JsonAcceptConfig implements WebMvcConfigurer {
         List<MediaType> ranges;
         try {
             ranges = MediaType.parseMediaTypes(accept);
-        } catch (InvalidMediaTypeException e) {
-            return false; // 깨진 Accept 는 스프링의 기존 처리에 맡긴다
+            // 대문자 Q 는 스프링이 범위를 검사하지 않아 Q=2 가 통과하고 Q=abc 는 숫자 변환 오류(500)가 난다
+            if (ranges.stream().anyMatch(range -> !(range.getQualityValue() >= 0 && range.getQualityValue() <= 1))) {
+                return true;
+            }
+        } catch (InvalidMediaTypeException | NumberFormatException e) {
+            return true; // 깨진 Accept(q=abc, Q=abc, q=2 등)는 실행 전에 406 으로 거절한다
         }
         List<MediaType> jsonRanges = ranges.stream().filter(range -> range.includes(MediaType.APPLICATION_JSON)).toList();
         int mostSpecific = jsonRanges.stream().mapToInt(JsonAcceptConfig::rank).min().orElse(-1);

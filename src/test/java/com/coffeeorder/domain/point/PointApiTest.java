@@ -131,7 +131,7 @@ class PointApiTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"application/xml", "application/json;q=0", "application/json;q=0, */*", "*/*;q=0",
-            "application/json;q=abc"})
+            "application/json;q=abc", "application/json;Q=abc", "application/json;Q=2"})
     void JSON_응답을_받지_않는_충전_요청은_충전하지_않는다(String accept) throws Exception {
         // produces 가 없으면 충전이 먼저 커밋되고 응답 변환에서 실패해 이중 충전 위험이 생긴다(application/xml).
         // q=0 은 "받지 않겠다"는 뜻이라 JsonAcceptConfig 가 실행 전에 막는다(없으면 충전 후 JSON 으로 응답해 버린다)
