@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -38,8 +38,8 @@ class PopularMenuListenerTest {
 
     @Test
     void Redis_가_실패해도_예외를_밖으로_던지지_않는다() {
-        // 주문은 이미 커밋됐으므로 주문 응답이 500 이 되면 안 된다(노션 EXP-8)
-        doThrow(new RedisConnectionFailureException("Redis 다운")).when(repository).increase(any(), anyMap());
+        // 주문은 이미 커밋됐으므로 주문 응답이 500 이 되면 안 된다(노션 EXP-8). 연결 실패만이 아니라 시간 초과 등 모든 실패를 삼킨다
+        doThrow(new QueryTimeoutException("Redis 응답 시간 초과")).when(repository).increase(any(), anyMap());
 
         assertThatCode(() -> listener.addSales(new OrderCompletedEvent(10L, 1L,
                 List.of(new OrderedMenu(1L, 1)), 4_500L, LocalDateTime.of(2099, 3, 10, 12, 0))))
