@@ -218,13 +218,14 @@ class CartApiTest {
     // ---- 수량 변경 U ----
 
     @Test
-    void U1_수량_변경은_담기와_같은_문구이고_수량을_바꾸며_version이_오른다() throws Exception {
+    void U1_수량_변경은_변경_문구를_주고_수량을_바꾸며_version이_오른다() throws Exception {
         add(userId, americano, "2");
 
         MockHttpServletResponse res = patchJson(userId, americano, "{\"quantity\":3}");
 
         assertThat(res.getStatus()).isEqualTo(200);
-        assertThat(res.getContentAsString(UTF_8)).isEqualTo(ADDED);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(
+                "{\"status\":200,\"message\":\"장바구니 수량이 변경되었습니다.\",\"data\":null}");
         assertThat(quantityInDb(americano)).isEqualTo(3);
         assertThat(versionInDb(americano)).isEqualTo(1L); // 낙관적 락 판 번호가 0 → 1
     }

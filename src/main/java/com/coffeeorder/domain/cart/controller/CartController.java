@@ -24,15 +24,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class CartController {
 
-    private static final String ADDED = "장바구니에 담겼습니다.";
-
     private final CartService cartService;
     private final CartRetryExecutor retryExecutor;
 
     @PostMapping("/items")
     public ApiResponse<Void> add(@PathVariable Long userId, @Valid @RequestBody AddCartItemRequest request) {
         retryExecutor.run(() -> cartService.add(userId, request.menuId(), request.quantity()));
-        return ApiResponse.ok(ADDED, null);
+        return ApiResponse.ok("장바구니에 담겼습니다.", null);
     }
 
     @GetMapping
@@ -40,12 +38,11 @@ public class CartController {
         return ApiResponse.ok("장바구니 조회 성공", cartService.getCart(userId));
     }
 
-    /** 수량 변경도 담기와 같은 문구를 쓴다(경화님 결정). */
     @PatchMapping("/items/{menuId}")
     public ApiResponse<Void> changeQuantity(
             @PathVariable Long userId, @PathVariable Long menuId, @Valid @RequestBody UpdateCartItemRequest request) {
         retryExecutor.run(() -> cartService.changeQuantity(userId, menuId, request.quantity()));
-        return ApiResponse.ok(ADDED, null);
+        return ApiResponse.ok("장바구니 수량이 변경되었습니다.", null);
     }
 
     @DeleteMapping("/items/{menuId}")
