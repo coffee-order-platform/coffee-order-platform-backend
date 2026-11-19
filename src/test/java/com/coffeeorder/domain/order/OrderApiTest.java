@@ -77,8 +77,9 @@ class OrderApiTest {
 
     @Test
     void O1_장바구니_전체를_결제하고_잔액_내역_주문_장바구니가_맞게_바뀐다() throws Exception {
-        putInCart(user, americano, 2);
+        // 메뉴 번호가 큰 라떼를 먼저 담아, 항목이 메뉴 번호 순이 아니라 담은 순서로 나오는지 구분한다
         putInCart(user, cloudLatte, 1);
+        putInCart(user, americano, 2);
 
         MockHttpServletResponse res = order(user.getId());
 
@@ -90,8 +91,8 @@ class OrderApiTest {
         assertThat(data.propertyNames()).containsExactly("orderId", "totalPrice", "balance", "orderedAt", "items");
         // 영수증: 장바구니가 비워지므로 주문 항목 스냅샷을 응답으로 돌려준다(담은 순서)
         assertThat(data.path("items").toString()).isEqualTo("["
-                + "{\"menuId\":" + americano + ",\"menuName\":\"아메리카노\",\"unitPrice\":4500,\"quantity\":2,\"linePrice\":9000},"
-                + "{\"menuId\":" + cloudLatte + ",\"menuName\":\"폭신폭신 구름과자 라떼\",\"unitPrice\":6000,\"quantity\":1,\"linePrice\":6000}]");
+                + "{\"menuId\":" + cloudLatte + ",\"menuName\":\"폭신폭신 구름과자 라떼\",\"unitPrice\":6000,\"quantity\":1,\"linePrice\":6000},"
+                + "{\"menuId\":" + americano + ",\"menuName\":\"아메리카노\",\"unitPrice\":4500,\"quantity\":2,\"linePrice\":9000}]");
         long orderId = data.path("orderId").asLong();
         assertThat(data.path("totalPrice").asLong()).isEqualTo(15_000L); // 4,500×2 + 6,000
         assertThat(data.path("balance").asLong()).isEqualTo(135_000L);
