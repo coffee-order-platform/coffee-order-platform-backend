@@ -45,4 +45,9 @@ public class Point extends BaseEntity {
     public void charge(long amount) {
         this.balance += amount;
     }
+
+    /** 주문 결제 차감. 잔액 확인은 호출하는 서비스가 한다. 비관적 락으로 조회한 행에서만 호출한다. */
+    public void use(long amount) {
+        this.balance -= amount;
+    }
 }
