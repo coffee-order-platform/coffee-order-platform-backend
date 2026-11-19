@@ -22,6 +22,13 @@ class ApiResponseTest {
     }
 
     @Test
+    void 생성_응답은_status_201이다() {
+        String json = objectMapper.writeValueAsString(ApiResponse.created("생성", List.of(1)));
+
+        assertThat(json).isEqualTo("{\"status\":201,\"message\":\"생성\",\"data\":[1]}");
+    }
+
+    @Test
     void data가_null이어도_키는_남는다() {
         String json = objectMapper.writeValueAsString(ApiResponse.ok("성공", null));
 

@@ -9,4 +9,9 @@ public record ApiResponse<T>(int status, String message, T data) {
     public static <T> ApiResponse<T> ok(String message, T data) {
         return new ApiResponse<>(200, message, data);
     }
+
+    /** 새 자원(주문·환불)을 만든 요청. 컨트롤러에 @ResponseStatus(CREATED) 를 함께 붙여 HTTP 상태와 맞춘다. */
+    public static <T> ApiResponse<T> created(String message, T data) {
+        return new ApiResponse<>(201, message, data);
+    }
 }
