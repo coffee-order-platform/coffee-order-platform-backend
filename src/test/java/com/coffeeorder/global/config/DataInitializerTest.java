@@ -12,6 +12,9 @@ import static org.mockito.Mockito.when;
 import com.coffeeorder.domain.menu.entity.Menu;
 import com.coffeeorder.domain.menu.repository.MenuRepository;
 import com.coffeeorder.domain.point.entity.Point;
+import com.coffeeorder.domain.point.entity.PointHistory;
+import com.coffeeorder.domain.point.entity.PointHistoryType;
+import com.coffeeorder.domain.point.repository.PointHistoryRepository;
 import com.coffeeorder.domain.point.repository.PointRepository;
 import com.coffeeorder.domain.user.entity.User;
 import com.coffeeorder.domain.user.repository.UserRepository;
@@ -22,8 +25,10 @@ class DataInitializerTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final PointRepository pointRepository = mock(PointRepository.class);
+    private final PointHistoryRepository pointHistoryRepository = mock(PointHistoryRepository.class);
     private final MenuRepository menuRepository = mock(MenuRepository.class);
-    private final DataInitializer initializer = new DataInitializer(userRepository, pointRepository, menuRepository);
+    private final DataInitializer initializer =
+            new DataInitializer(userRepository, pointRepository, pointHistoryRepository, menuRepository);
 
     @Test
     void 두_테이블이_비어_있으면_사용자_3명_포인트_메뉴_5종을_만든다() {
@@ -37,6 +42,14 @@ class DataInitializerTest {
         verify(pointRepository, times(3)).save(points.capture());
         assertThat(points.getAllValues()).extracting(Point::getBalance).containsExactly(150_000L, 30_000L, 2_000L);
         assertThat(points.getAllValues()).extracting(p -> p.getUser().getName()).containsExactly("김커피", "이라떼", "박빈지갑");
+
+        // 초기 포인트도 충전 내역으로 남겨 잔액 = 내역 합계(노션 3, 11/19)
+        ArgumentCaptor<PointHistory> histories = ArgumentCaptor.forClass(PointHistory.class);
+        verify(pointHistoryRepository, times(3)).save(histories.capture());
+        assertThat(histories.getAllValues()).extracting(PointHistory::getType).containsOnly(PointHistoryType.CHARGE);
+        assertThat(histories.getAllValues()).extracting(PointHistory::getAmount).containsExactly(150_000L, 30_000L, 2_000L);
+        assertThat(histories.getAllValues()).extracting(PointHistory::getBalanceAfter).containsExactly(150_000L, 30_000L, 2_000L);
+        assertThat(histories.getAllValues()).extracting(h -> h.getUser().getName()).containsExactly("김커피", "이라떼", "박빈지갑");
 
         ArgumentCaptor<Menu> menus = ArgumentCaptor.forClass(Menu.class);
         verify(menuRepository, times(5)).save(menus.capture());
@@ -55,6 +68,7 @@ class DataInitializerTest {
 
         verify(userRepository, never()).save(any());
         verify(pointRepository, never()).save(any());
+        verify(pointHistoryRepository, never()).save(any());
         verify(menuRepository, times(5)).save(any(Menu.class));
     }
 

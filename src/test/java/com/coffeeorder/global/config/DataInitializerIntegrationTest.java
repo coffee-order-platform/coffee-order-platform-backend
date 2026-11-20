@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.coffeeorder.domain.menu.repository.MenuRepository;
 import com.coffeeorder.domain.user.repository.UserRepository;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +36,7 @@ class DataInitializerIntegrationTest {
     }
 
     @Test
-    void 빈_DB에서_사용자_3명_포인트_메뉴_5종을_만들고_충전_내역은_남기지_않는다() {
+    void 빈_DB에서_사용자_3명_포인트_메뉴_5종을_만들고_초기_포인트를_충전_내역으로_남긴다() {
         initializer.run(null);
 
         assertThat(userRepository.count()).isEqualTo(3);
@@ -43,7 +44,12 @@ class DataInitializerIntegrationTest {
         assertThat(balanceOf("김커피")).isEqualTo(150_000L);
         assertThat(balanceOf("이라떼")).isEqualTo(30_000L);
         assertThat(balanceOf("박빈지갑")).isEqualTo(2_000L);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM point_histories", Long.class)).isZero();
+        // 사용자마다 CHARGE 1건, 잔액 = 내역 합계(노션 3, 11/19)
+        assertThat(jdbc.queryForList("SELECT type, COUNT(*) AS cnt FROM point_histories GROUP BY type"))
+                .containsExactly(Map.of("type", "CHARGE", "cnt", 3L));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM points p WHERE p.balance <> "
+                + "(SELECT COALESCE(SUM(h.amount), 0) FROM point_histories h WHERE h.user_id = p.user_id)", Long.class))
+                .isZero();
     }
 
     @Test
@@ -54,6 +60,7 @@ class DataInitializerIntegrationTest {
         assertThat(userRepository.count()).isEqualTo(3);
         assertThat(menuRepository.count()).isEqualTo(5);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM points", Long.class)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM point_histories", Long.class)).isEqualTo(3);
     }
 
     @Test

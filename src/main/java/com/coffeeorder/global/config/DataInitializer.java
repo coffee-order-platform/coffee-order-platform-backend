@@ -3,6 +3,9 @@ package com.coffeeorder.global.config;
 import com.coffeeorder.domain.menu.entity.Menu;
 import com.coffeeorder.domain.menu.repository.MenuRepository;
 import com.coffeeorder.domain.point.entity.Point;
+import com.coffeeorder.domain.point.entity.PointHistory;
+import com.coffeeorder.domain.point.entity.PointHistoryType;
+import com.coffeeorder.domain.point.repository.PointHistoryRepository;
 import com.coffeeorder.domain.point.repository.PointRepository;
 import com.coffeeorder.domain.user.entity.User;
 import com.coffeeorder.domain.user.repository.UserRepository;
@@ -16,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 앱 시작 시 가짜 사용자·메뉴를 만든다. 테이블마다 비어 있을 때만 만들어 재시작해도 중복되지 않는다.
- * 사용자와 포인트 행은 한 트랜잭션이라 "포인트 없는 사용자"가 남지 않는다. 초기 포인트는 충전 내역에 남기지 않는다.
+ * 사용자와 포인트 행은 한 트랜잭션이라 "포인트 없는 사용자"가 남지 않는다. 초기 포인트는 충전 내역(CHARGE)으로도 남겨 잔액 = 내역 합계가 되게 한다(노션 3, 11/19).
  * 앱 인스턴스 1대로 뜨는 것을 전제한다(동시에 2대가 빈 DB 에 뜨면 중복 시드가 들어갈 수 있다).
  */
 @Slf4j
@@ -42,6 +45,7 @@ public class DataInitializer implements ApplicationRunner {
 
     private final UserRepository userRepository;
     private final PointRepository pointRepository;
+    private final PointHistoryRepository pointHistoryRepository;
     private final MenuRepository menuRepository;
 
     @Override
@@ -51,6 +55,8 @@ public class DataInitializer implements ApplicationRunner {
             for (SeedUser seed : USERS) {
                 User user = userRepository.save(new User(seed.name()));
                 pointRepository.save(new Point(user, seed.point()));
+                pointHistoryRepository.save(
+                        new PointHistory(user, null, PointHistoryType.CHARGE, seed.point(), seed.point()));
             }
             log.info("가짜 사용자 {}명 생성", USERS.size());
         }
