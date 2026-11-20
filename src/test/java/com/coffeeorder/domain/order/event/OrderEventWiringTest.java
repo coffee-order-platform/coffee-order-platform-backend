@@ -68,6 +68,22 @@ class OrderEventWiringTest {
     }
 
     @Test
+    void 환불이_롤백되면_인기_메뉴에서_빼지_않는다() {
+        transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(event));
+        reset(orderDataSender);
+
+        transactionTemplate.executeWithoutResult(status -> {
+            eventPublisher.publishEvent(
+                    new OrderRefundedEvent(10L, List.of(new OrderedMenu(1L, 2)), LocalDateTime.of(2099, 3, 10, 12, 0)));
+            status.setRollbackOnly();
+        });
+
+        assertThat(redisTemplate.opsForZSet().score(KEY, "1")).isEqualTo(2.0);
+        assertThat(redisTemplate.opsForZSet().score(KEY, "2")).isEqualTo(1.0);
+        verifyNoInteractions(orderDataSender);
+    }
+
+    @Test
     void O9_트랜잭션이_롤백되면_보내지도_집계하지도_않는다() {
         transactionTemplate.executeWithoutResult(status -> {
             eventPublisher.publishEvent(event);
