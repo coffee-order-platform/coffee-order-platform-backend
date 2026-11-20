@@ -415,12 +415,20 @@ class OrderApiTest {
         putInCart(user, americano, 2);
         putInCart(user, cloudLatte, 1);
         long orderId = orderId(order(user.getId())); // 15,000 결제 → 잔액 135,000
+        // 주문 시각을 과거로 옮겨, 환불이 "지금"이 아니라 주문 시각을 쓰는지 정확히 가린다
+        entityManager.flush();
+        jdbc.update("UPDATE orders SET created_at = '2099-03-05 23:59:00' WHERE id = ?", orderId);
+        entityManager.clear();
 
         MockHttpServletResponse res = refund(user.getId(), orderId);
 
         assertThat(res.getStatus()).isEqualTo(201);
+        // 응답은 주문 응답과 같은 형태(노션 5-5, 11/20). totalPrice 가 돌려준 금액, balance 는 환불 후 잔액
         assertThat(res.getContentAsString(UTF_8)).isEqualTo("{\"status\":201,\"message\":\"환불이 완료되었습니다.\","
-                + "\"data\":{\"orderId\":" + orderId + ",\"refundedAmount\":15000,\"balance\":150000}}");
+                + "\"data\":{\"orderId\":" + orderId + ",\"totalPrice\":15000,\"balance\":150000,"
+                + "\"orderedAt\":\"2099-03-05T23:59:00\",\"items\":["
+                + "{\"menuId\":" + americano + ",\"menuName\":\"아메리카노\",\"unitPrice\":4500,\"quantity\":2,\"linePrice\":9000},"
+                + "{\"menuId\":" + cloudLatte + ",\"menuName\":\"폭신폭신 구름과자 라떼\",\"unitPrice\":6000,\"quantity\":1,\"linePrice\":6000}]}}");
         assertThat(balanceInDb(user)).isEqualTo(150_000L);
         assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, orderId))
                 .isEqualTo("REFUNDED");
@@ -431,8 +439,7 @@ class OrderApiTest {
         // 커밋 후 인기 메뉴 차감용: 주문한 메뉴·수량과 주문 시각
         OrderRefundedEvent event = events.stream(OrderRefundedEvent.class).findFirst().orElseThrow();
         assertThat(event.menus()).containsExactly(new OrderedMenu(americano, 2), new OrderedMenu(cloudLatte, 1));
-        assertThat(event.orderedAt()).isCloseTo(jdbc.queryForObject(
-                "SELECT created_at FROM orders WHERE id = ?", LocalDateTime.class, orderId), within(1, ChronoUnit.MILLIS));
+        assertThat(event.orderedAt()).isEqualTo(LocalDateTime.of(2099, 3, 5, 23, 59));
     }
 
     @Test

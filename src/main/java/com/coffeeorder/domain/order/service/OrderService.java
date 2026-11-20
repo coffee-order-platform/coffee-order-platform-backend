@@ -7,7 +7,6 @@ import com.coffeeorder.domain.menu.repository.MenuRepository;
 import com.coffeeorder.domain.order.dto.OrderDetailResponse;
 import com.coffeeorder.domain.order.dto.OrderResponse;
 import com.coffeeorder.domain.order.dto.OrderSummaryResponse;
-import com.coffeeorder.domain.order.dto.RefundResponse;
 import com.coffeeorder.domain.order.entity.Order;
 import com.coffeeorder.domain.order.entity.OrderItem;
 import com.coffeeorder.domain.order.entity.OrderStatus;
@@ -130,7 +129,7 @@ public class OrderService {
      *   두 번째 요청은 앞 요청이 커밋한 REFUNDED 를 보고 ALREADY_REFUNDED 가 된다(REPEATABLE READ 읽기 시점, 주문 API 와 같은 이유).
      */
     @Transactional
-    public RefundResponse refund(Long userId, Long orderId) {
+    public OrderResponse refund(Long userId, Long orderId) {
         Point point = lockPoint(userId);
         Order order = orderRepository.findByIdAndUserId(orderId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
@@ -144,11 +143,13 @@ public class OrderService {
                 new PointHistory(point.getUser(), order, PointHistoryType.REFUND, amount, point.getBalance()));
         order.refund();
 
+        List<OrderItem> orderItems = orderItemRepository.findByOrderIdOrderById(orderId);
         eventPublisher.publishEvent(new OrderRefundedEvent(orderId,
-                orderItemRepository.findByOrderIdOrderById(orderId).stream()
-                        .map(item -> new OrderedMenu(item.getMenu().getId(), item.getQuantity())).toList(),
+                orderItems.stream().map(item -> new OrderedMenu(item.getMenu().getId(), item.getQuantity())).toList(),
                 order.getCreatedAt()));
-        return new RefundResponse(orderId, amount, point.getBalance());
+        // 응답은 주문 응답과 같은 형태(노션 5-5, 11/20): balance 는 환불 후 잔액
+        return new OrderResponse(orderId, amount, point.getBalance(), order.getCreatedAt(),
+                orderItems.stream().map(OrderResponse.Item::from).toList());
     }
 
     /**

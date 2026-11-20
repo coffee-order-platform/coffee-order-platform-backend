@@ -3,7 +3,6 @@ package com.coffeeorder.domain.order.controller;
 import com.coffeeorder.domain.order.dto.OrderDetailResponse;
 import com.coffeeorder.domain.order.dto.OrderResponse;
 import com.coffeeorder.domain.order.dto.OrderSummaryResponse;
-import com.coffeeorder.domain.order.dto.RefundResponse;
 import com.coffeeorder.domain.order.service.OrderService;
 import com.coffeeorder.global.common.ApiResponse;
 import com.coffeeorder.global.common.CursorResponse;
@@ -55,7 +54,7 @@ public class OrderController {
     /** 전체 환불(노션 5-5). 환불 기록이 새로 생기므로 201, 요청 본문 없음. */
     @PostMapping("/{orderId}/refund")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<RefundResponse> refund(@PathVariable Long userId, @PathVariable Long orderId) {
+    public ApiResponse<OrderResponse> refund(@PathVariable Long userId, @PathVariable Long orderId) {
         return ApiResponse.created("환불이 완료되었습니다.", orderService.refund(userId, orderId));
     }
 }
