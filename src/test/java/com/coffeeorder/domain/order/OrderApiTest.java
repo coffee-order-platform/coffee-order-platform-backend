@@ -477,10 +477,12 @@ class OrderApiTest {
 
     @Test
     void 환불_서비스에는_트랜잭션이_걸려_있다() {
-        // 잔액 복구·내역·상태 변경이 함께 롤백되는 근거. 실제 동시 환불은 11/20 동시성 테스트(D-12)에서 본다
+        // 이 클래스 전체가 @Transactional 이라, 서비스의 애너테이션이 빠지거나 readOnly 가 돼도 다른 테스트는 모른다.
+        // 같은 주문 동시 환불(1건만 성공)은 리뷰어가 실험으로 확인(8스레드×15회), 커밋형 테스트는 D-12 동시성 테스트에서 추가
         Transactional tx = org.springframework.util.ReflectionUtils.findMethod(
                 OrderService.class, "refund", Long.class, Long.class).getAnnotation(Transactional.class);
         assertThat(tx).isNotNull();
+        assertThat(tx.readOnly()).isFalse();
     }
 
     // ---- 도우미 ----
