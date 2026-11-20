@@ -181,7 +181,7 @@ class CartApiTest {
 
         assertThat(res.getStatus()).isEqualTo(200);
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(
-                "{\"status\":200,\"message\":\"장바구니 조회 성공\",\"data\":{\"items\":["
+                "{\"status\":200,\"message\":null,\"data\":{\"items\":["
                         + "{\"menuId\":" + cloudLatte
                         + ",\"name\":\"폭신폭신 구름과자 라떼\",\"price\":6000,\"quantity\":1,\"linePrice\":6000},"
                         + "{\"menuId\":" + americano
@@ -194,7 +194,7 @@ class CartApiTest {
         MockHttpServletResponse res = mockMvc.perform(get("/api/users/{id}/cart", userId)).andReturn().getResponse();
 
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(
-                "{\"status\":200,\"message\":\"장바구니 조회 성공\",\"data\":{\"items\":[],\"totalPrice\":0}}");
+                "{\"status\":200,\"message\":null,\"data\":{\"items\":[],\"totalPrice\":0}}");
     }
 
     @Test

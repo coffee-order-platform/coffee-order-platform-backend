@@ -29,7 +29,7 @@ class MenuApiTest {
         String body = res.getContentAsString(UTF_8);
 
         assertThat(res.getStatus()).isEqualTo(200);
-        assertThat(body).startsWith("{\"status\":200,\"message\":\"메뉴 목록 조회 성공\",\"data\":[{\"menuId\":");
+        assertThat(body).startsWith("{\"status\":200,\"message\":null,\"data\":[{\"menuId\":");
         // 테스트 케이스 M-1: 메뉴 5개
         assertThat(body.split("\"menuId\":", -1)).hasSize(6);
         // 메뉴 ID 는 하드코딩하지 않고, 이름·가격·순서만 확인한다
