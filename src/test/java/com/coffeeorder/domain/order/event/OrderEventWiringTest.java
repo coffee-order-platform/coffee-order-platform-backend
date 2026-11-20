@@ -2,8 +2,10 @@ package com.coffeeorder.domain.order.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.coffeeorder.domain.order.event.OrderCompletedEvent.OrderedMenu;
 import java.time.LocalDateTime;
@@ -50,6 +52,19 @@ class OrderEventWiringTest {
         verify(orderDataSender, times(1)).send(event);
         assertThat(redisTemplate.opsForZSet().score(KEY, "1")).isEqualTo(2.0);
         assertThat(redisTemplate.opsForZSet().score(KEY, "2")).isEqualTo(1.0);
+    }
+
+    @Test
+    void 환불이_커밋되면_인기_메뉴에서_빼고_주문_데이터는_다시_보내지_않는다() {
+        transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(event));
+        reset(orderDataSender);
+
+        transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(
+                new OrderRefundedEvent(10L, List.of(new OrderedMenu(1L, 2)), LocalDateTime.of(2099, 3, 10, 12, 0))));
+
+        assertThat(redisTemplate.opsForZSet().score(KEY, "1")).isEqualTo(0.0);
+        assertThat(redisTemplate.opsForZSet().score(KEY, "2")).isEqualTo(1.0);
+        verifyNoInteractions(orderDataSender); // 환불은 Mock 전송 없음(11/19)
     }
 
     @Test

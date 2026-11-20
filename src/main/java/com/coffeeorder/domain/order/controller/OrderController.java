@@ -3,6 +3,7 @@ package com.coffeeorder.domain.order.controller;
 import com.coffeeorder.domain.order.dto.OrderDetailResponse;
 import com.coffeeorder.domain.order.dto.OrderResponse;
 import com.coffeeorder.domain.order.dto.OrderSummaryResponse;
+import com.coffeeorder.domain.order.dto.RefundResponse;
 import com.coffeeorder.domain.order.service.OrderService;
 import com.coffeeorder.global.common.ApiResponse;
 import com.coffeeorder.global.common.CursorResponse;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 주문(POST, 장바구니 전체, 새 주문이 생기므로 201 — 노션 5-3)과 주문 조회(GET 목록·단건, 200, message null).
+ * 주문(POST, 장바구니 전체, 새 주문이 생기므로 201 — 노션 5-3), 환불(POST, 201 — 노션 5-5), 주문 조회(GET 목록·단건, 200, message null).
  * produces 고정 이유는 PointController 참고.
  */
 @RestController
@@ -49,5 +50,12 @@ public class OrderController {
     @GetMapping("/{orderId}")
     public ApiResponse<OrderDetailResponse> getOrder(@PathVariable Long userId, @PathVariable Long orderId) {
         return ApiResponse.ok(orderService.getOrder(userId, orderId));
+    }
+
+    /** 전체 환불(노션 5-5). 환불 기록이 새로 생기므로 201, 요청 본문 없음. */
+    @PostMapping("/{orderId}/refund")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<RefundResponse> refund(@PathVariable Long userId, @PathVariable Long orderId) {
+        return ApiResponse.created("환불이 완료되었습니다.", orderService.refund(userId, orderId));
     }
 }

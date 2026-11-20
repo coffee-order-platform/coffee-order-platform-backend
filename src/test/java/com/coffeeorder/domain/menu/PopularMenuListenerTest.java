@@ -12,6 +12,7 @@ import com.coffeeorder.domain.menu.repository.PopularMenuRepository;
 import com.coffeeorder.domain.menu.service.PopularMenuListener;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent.OrderedMenu;
+import com.coffeeorder.domain.order.event.OrderRefundedEvent;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -48,10 +49,31 @@ class PopularMenuListenerTest {
 
     @Test
     void 반영은_커밋이_끝난_뒤에만_실행된다() throws Exception {
-        TransactionalEventListener annotation = PopularMenuListener.class
-                .getMethod("addSales", OrderCompletedEvent.class).getAnnotation(TransactionalEventListener.class);
+        for (var method : new java.lang.reflect.Method[] {
+                PopularMenuListener.class.getMethod("addSales", OrderCompletedEvent.class),
+                PopularMenuListener.class.getMethod("subtractSales", OrderRefundedEvent.class)}) {
+            TransactionalEventListener annotation = method.getAnnotation(TransactionalEventListener.class);
 
-        assertThat(annotation).isNotNull();
-        assertThat(annotation.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
+            assertThat(annotation).isNotNull();
+            assertThat(annotation.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
+        }
+    }
+
+    @Test
+    void 환불은_환불한_날이_아니라_주문한_날짜_키에서_뺀다() {
+        listener.subtractSales(new OrderRefundedEvent(10L,
+                List.of(new OrderedMenu(1L, 3), new OrderedMenu(2L, 1)), LocalDateTime.of(2099, 3, 5, 23, 59)));
+
+        verify(repository).decrease(LocalDate.of(2099, 3, 5), Map.of(1L, 3, 2L, 1));
+    }
+
+    @Test
+    void 차감에_실패해도_예외를_밖으로_던지지_않는다() {
+        // 환불은 이미 커밋됐으므로 환불 응답이 500 이 되면 안 된다
+        doThrow(new QueryTimeoutException("Redis 응답 시간 초과")).when(repository).decrease(any(), anyMap());
+
+        assertThatCode(() -> listener.subtractSales(new OrderRefundedEvent(10L,
+                List.of(new OrderedMenu(1L, 1)), LocalDateTime.of(2099, 3, 10, 12, 0))))
+                .doesNotThrowAnyException();
     }
 }

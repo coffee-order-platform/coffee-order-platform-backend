@@ -3,12 +3,15 @@ package com.coffeeorder.domain.menu.repository;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -56,4 +59,30 @@ public class PopularMenuRepository {
         }
         return totals;
     }
+
+    /**
+     * 환불한 주문의 날짜 키에서 메뉴별 수량을 뺀다(노션 5-4). 0 아래로는 내리지 않고, 키(또는 메뉴)가 없으면 건너뛴다 —
+     * 8일이 지나 만료된 키를 다시 만들지 않기 위해서다. 읽고·계산하고·쓰는 세 단계를 Lua 스크립트 하나로 Redis 안에서 한 번에 실행해,
+     * 같은 메뉴의 주문(ZINCRBY)이 사이에 끼어도 수량이 사라지지 않는다. 기존 키에 ZADD 하므로 만료 시각은 그대로 남는다.
+     */
+    public void decrease(LocalDate date, Map<Long, Integer> quantities) {
+        List<String> args = new ArrayList<>();
+        quantities.forEach((menuId, quantity) -> {
+            args.add(menuId.toString());
+            args.add(quantity.toString());
+        });
+        redisTemplate.execute(DECREASE_SCRIPT, List.of(key(date)), args.toArray());
+    }
+
+    private static final RedisScript<Long> DECREASE_SCRIPT = RedisScript.of("""
+            for i = 1, #ARGV, 2 do
+              local score = redis.call('ZSCORE', KEYS[1], ARGV[i])
+              if score then
+                local next = tonumber(score) - tonumber(ARGV[i + 1])
+                if next < 0 then next = 0 end
+                redis.call('ZADD', KEYS[1], next, ARGV[i])
+              end
+            end
+            return 0
+            """, Long.class);
 }

@@ -50,4 +50,9 @@ public class Point extends BaseEntity {
     public void use(long amount) {
         this.balance -= amount;
     }
+
+    /** 환불로 결제 금액을 되돌린다. 비관적 락으로 조회한 행에서만 호출한다. */
+    public void refund(long amount) {
+        this.balance += amount;
+    }
 }
