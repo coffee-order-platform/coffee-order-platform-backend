@@ -4,7 +4,9 @@ import com.coffeeorder.domain.cart.entity.CartItem;
 import com.coffeeorder.domain.cart.repository.CartItemRepository;
 import com.coffeeorder.domain.menu.entity.Menu;
 import com.coffeeorder.domain.menu.repository.MenuRepository;
+import com.coffeeorder.domain.order.dto.OrderDetailResponse;
 import com.coffeeorder.domain.order.dto.OrderResponse;
+import com.coffeeorder.domain.order.dto.OrderSummaryResponse;
 import com.coffeeorder.domain.order.entity.Order;
 import com.coffeeorder.domain.order.entity.OrderItem;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent;
@@ -17,6 +19,7 @@ import com.coffeeorder.domain.point.entity.PointHistoryType;
 import com.coffeeorder.domain.point.repository.PointHistoryRepository;
 import com.coffeeorder.domain.point.repository.PointRepository;
 import com.coffeeorder.domain.user.repository.UserRepository;
+import com.coffeeorder.global.common.CursorResponse;
 import com.coffeeorder.global.exception.BusinessException;
 import com.coffeeorder.global.exception.ErrorCode;
 import java.util.List;
@@ -26,6 +29,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -93,5 +97,38 @@ public class OrderService {
                 totalPrice, order.getCreatedAt()));
         return new OrderResponse(order.getId(), totalPrice, point.getBalance(), order.getCreatedAt(),
                 orderItems.stream().map(OrderResponse.Item::from).toList());
+    }
+
+    /** 최신순 커서 조회(포인트 내역과 같은 규칙). size+1 개를 읽어 다음 페이지 여부를 판단한다. 커서는 이 사용자의 주문 id 여야 한다. */
+    @Transactional(readOnly = true)
+    public CursorResponse<OrderSummaryResponse> getOrders(Long userId, Long cursor, int size) {
+        validateUser(userId);
+        Limit limit = Limit.of(size + 1);
+        List<Order> fetched;
+        if (cursor == null) {
+            fetched = orderRepository.findByUserIdOrderByIdDesc(userId, limit);
+        } else {
+            if (orderRepository.findByIdAndUserId(cursor, userId).isEmpty()) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST);
+            }
+            fetched = orderRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, cursor, limit);
+        }
+        return CursorResponse.of(
+                fetched.stream().map(OrderSummaryResponse::from).toList(), size, OrderSummaryResponse::orderId);
+    }
+
+    /** 없는 주문과 남의 주문은 똑같이 ORDER_NOT_FOUND — 남의 주문이 있는지 드러내지 않는다. */
+    @Transactional(readOnly = true)
+    public OrderDetailResponse getOrder(Long userId, Long orderId) {
+        validateUser(userId);
+        Order order = orderRepository.findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        return OrderDetailResponse.of(order, orderItemRepository.findByOrderIdOrderById(orderId));
+    }
+
+    private void validateUser(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
     }
 }

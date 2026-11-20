@@ -6,6 +6,11 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 @JsonPropertyOrder({"status", "message", "data"})
 public record ApiResponse<T>(int status, String message, T data) {
 
+    /** 조회(GET). 조회는 알릴 말이 없어 message 를 null 로 둔다 — 칸은 남겨 모양을 하나로 유지(11/20 경화님 결정). */
+    public static <T> ApiResponse<T> ok(T data) {
+        return new ApiResponse<>(200, null, data);
+    }
+
     public static <T> ApiResponse<T> ok(String message, T data) {
         return new ApiResponse<>(200, message, data);
     }
