@@ -415,7 +415,7 @@ class OrderApiTest {
         putInCart(user, americano, 2);
         putInCart(user, cloudLatte, 1);
         long orderId = orderId(order(user.getId())); // 15,000 결제 → 잔액 135,000
-        // 주문 시각을 과거로 옮겨, 환불이 "지금"이 아니라 주문 시각을 쓰는지 정확히 가린다
+        // 주문 시각을 지금과 확실히 다른 시각으로 바꿔, 환불이 "지금"이 아니라 주문 시각을 쓰는지 정확히 가린다
         entityManager.flush();
         jdbc.update("UPDATE orders SET created_at = '2099-03-05 23:59:00' WHERE id = ?", orderId);
         entityManager.clear();
