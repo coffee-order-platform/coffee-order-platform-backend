@@ -9,6 +9,7 @@ import java.util.List;
 /**
  * 주문 결과(영수증): 주문 번호, 결제 총액, 결제 후 잔액, 주문 시각(초 단위), 주문 항목 스냅샷.
  * 주문하면 장바구니가 비워져 화면이 주문 내용을 다시 알 길이 없으므로 항목까지 돌려준다(11/19 경화님 결정).
+ * 환불 응답도 같은 형태다(노션 5-5, 11/20). 환불에서는 totalPrice 가 돌려준 금액, balance 가 환불 후 잔액이다.
  */
 @JsonPropertyOrder({"orderId", "totalPrice", "balance", "orderedAt", "items"})
 public record OrderResponse(

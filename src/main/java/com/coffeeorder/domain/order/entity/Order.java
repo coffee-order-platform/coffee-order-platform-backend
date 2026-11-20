@@ -56,4 +56,9 @@ public class Order {
         this.totalPrice = totalPrice;
         this.status = OrderStatus.PAID;
     }
+
+    /** 전체 환불. 이미 환불됐는지는 호출하는 서비스가 포인트 락 안에서 확인한다. */
+    public void refund() {
+        this.status = OrderStatus.REFUNDED;
+    }
 }

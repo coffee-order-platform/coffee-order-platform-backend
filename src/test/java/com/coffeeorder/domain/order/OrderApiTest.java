@@ -12,6 +12,7 @@ import com.coffeeorder.domain.cart.repository.CartItemRepository;
 import com.coffeeorder.domain.menu.repository.MenuRepository;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent.OrderedMenu;
+import com.coffeeorder.domain.order.event.OrderRefundedEvent;
 import com.coffeeorder.domain.order.service.OrderService;
 import com.coffeeorder.domain.point.entity.Point;
 import com.coffeeorder.domain.point.repository.PointRepository;
@@ -404,7 +405,99 @@ class OrderApiTest {
         }
     }
 
+    // ---- 환불 (11/20, 노션 5-5) ----
+
+    private static final String ORDER_NOT_FOUND =
+            "{\"status\":404,\"code\":\"ORDER_NOT_FOUND\",\"message\":\"주문을 찾을 수 없습니다.\"}";
+
+    @Test
+    void 환불하면_결제_금액이_돌아오고_환불_내역과_주문_상태가_바뀐다() throws Exception {
+        putInCart(user, americano, 2);
+        putInCart(user, cloudLatte, 1);
+        long orderId = orderId(order(user.getId())); // 15,000 결제 → 잔액 135,000
+        // 주문 시각을 지금과 확실히 다른 시각으로 바꿔, 환불이 "지금"이 아니라 주문 시각을 쓰는지 정확히 가린다
+        entityManager.flush();
+        jdbc.update("UPDATE orders SET created_at = '2099-03-05 23:59:00' WHERE id = ?", orderId);
+        entityManager.clear();
+
+        MockHttpServletResponse res = refund(user.getId(), orderId);
+
+        assertThat(res.getStatus()).isEqualTo(201);
+        // 응답은 주문 응답과 같은 형태(노션 5-5, 11/20). totalPrice 가 돌려준 금액, balance 는 환불 후 잔액
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo("{\"status\":201,\"message\":\"환불이 완료되었습니다.\","
+                + "\"data\":{\"orderId\":" + orderId + ",\"totalPrice\":15000,\"balance\":150000,"
+                + "\"orderedAt\":\"2099-03-05T23:59:00\",\"items\":["
+                + "{\"menuId\":" + americano + ",\"menuName\":\"아메리카노\",\"unitPrice\":4500,\"quantity\":2,\"linePrice\":9000},"
+                + "{\"menuId\":" + cloudLatte + ",\"menuName\":\"폭신폭신 구름과자 라떼\",\"unitPrice\":6000,\"quantity\":1,\"linePrice\":6000}]}}");
+        assertThat(balanceInDb(user)).isEqualTo(150_000L);
+        assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, orderId))
+                .isEqualTo("REFUNDED");
+        assertThat(jdbc.queryForList("SELECT type, amount, balance_after, order_id FROM point_histories "
+                + "WHERE user_id = ? AND type = 'REFUND'", user.getId()))
+                .containsExactly(Map.of("type", "REFUND", "amount", 15_000L, "balance_after", 150_000L,
+                        "order_id", orderId));
+        // 커밋 후 인기 메뉴 차감용: 주문한 메뉴·수량과 주문 시각
+        OrderRefundedEvent event = events.stream(OrderRefundedEvent.class).findFirst().orElseThrow();
+        assertThat(event.menus()).containsExactly(new OrderedMenu(americano, 2), new OrderedMenu(cloudLatte, 1));
+        assertThat(event.orderedAt()).isEqualTo(LocalDateTime.of(2099, 3, 5, 23, 59));
+    }
+
+    @Test
+    void 이미_환불한_주문은_ALREADY_REFUNDED_이고_두_번_돌려주지_않는다() throws Exception {
+        long orderId = placeOrder(user, americano, 1);
+        refund(user.getId(), orderId);
+
+        MockHttpServletResponse res = refund(user.getId(), orderId);
+
+        assertThat(res.getStatus()).isEqualTo(400);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(
+                "{\"status\":400,\"code\":\"ALREADY_REFUNDED\",\"message\":\"이미 환불된 주문입니다.\"}");
+        assertThat(balanceInDb(user)).isEqualTo(150_000L);
+        assertThat(events.stream(OrderRefundedEvent.class)).hasSize(1); // 실패한 두 번째는 차감하지 않는다
+    }
+
+    @Test
+    void 남의_주문은_환불된_것이어도_ORDER_NOT_FOUND_이고_아무것도_바뀌지_않는다() throws Exception {
+        // 소유자 확인이 상태 확인보다 먼저다. 반대면 ALREADY_REFUNDED 가 나가 남의 주문이 있다는 게 드러난다
+        User other = createUser("남의주문", 20_000);
+        long paid = placeOrder(other, americano, 1);
+        long refunded = placeOrder(other, cloudLatte, 1);
+        refund(other.getId(), refunded);
+
+        for (long orderId : new long[] {paid, refunded, Long.MAX_VALUE}) {
+            MockHttpServletResponse res = refund(user.getId(), orderId);
+
+            assertThat(res.getStatus()).isEqualTo(404);
+            assertThat(res.getContentAsString(UTF_8)).isEqualTo(ORDER_NOT_FOUND);
+        }
+        assertThat(balanceInDb(user)).isEqualTo(150_000L);
+        assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, paid)).isEqualTo("PAID");
+    }
+
+    @Test
+    void 없는_사용자의_환불은_USER_NOT_FOUND() throws Exception {
+        MockHttpServletResponse res = refund(Long.MAX_VALUE, 1L);
+
+        assertThat(res.getStatus()).isEqualTo(404);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(USER_NOT_FOUND);
+    }
+
+    @Test
+    void 환불_서비스에는_트랜잭션이_걸려_있다() {
+        // 이 클래스 전체가 @Transactional 이라, 서비스의 애너테이션이 빠지거나 readOnly 가 돼도 다른 테스트는 모른다.
+        // 같은 주문 동시 환불(1건만 성공)은 리뷰어가 실험으로 확인(8스레드×15회), 커밋형 테스트는 D-12 동시성 테스트에서 추가
+        Transactional tx = org.springframework.util.ReflectionUtils.findMethod(
+                OrderService.class, "refund", Long.class, Long.class).getAnnotation(Transactional.class);
+        assertThat(tx).isNotNull();
+        assertThat(tx.readOnly()).isFalse();
+    }
+
     // ---- 도우미 ----
+
+    private MockHttpServletResponse refund(long userId, long orderId) throws Exception {
+        return mockMvc.perform(post("/api/users/{id}/orders/{orderId}/refund", userId, orderId))
+                .andReturn().getResponse();
+    }
 
     private long placeOrder(User owner, long menuId, int quantity) throws Exception {
         putInCart(owner, menuId, quantity);

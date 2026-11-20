@@ -146,7 +146,7 @@ class PopularMenuApiTest {
 
     @Test
     void 판매_수량_합계가_0인_메뉴는_순위에서_뺀다() throws Exception {
-        // 환불로 차감돼 0 이 된 경우(환불 PR 에서 차감 구현)
+        // 환불로 차감돼 0 이 된 경우
         redisTemplate.opsForZSet().add(PopularMenuRepositoryKeys.today(), Long.toString(americano), 0);
         popularMenuRepository.increase(TODAY, Map.of(cloudLatte, 1));
 
@@ -171,6 +171,37 @@ class PopularMenuApiTest {
         assertThat(res.getStatus()).isEqualTo(500);
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(
                 "{\"status\":500,\"code\":\"INTERNAL_SERVER_ERROR\",\"message\":\"서버 오류가 발생했습니다.\"}");
+    }
+
+    // ---- 환불 차감 (11/20) ----
+
+    @Test
+    void 환불하면_주문한_날짜_키에서_수량만큼_빼고_0_아래로는_내리지_않는다() {
+        LocalDate orderDay = TODAY.minusDays(2);
+        popularMenuRepository.increase(orderDay, Map.of(americano, 3, cloudLatte, 1));
+
+        popularMenuRepository.decrease(orderDay, Map.of(americano, 2, cloudLatte, 5));
+
+        String key = PopularMenuRepositoryKeys.of(orderDay);
+        assertThat(redisTemplate.opsForZSet().score(key, Long.toString(americano))).isEqualTo(1.0);
+        assertThat(redisTemplate.opsForZSet().score(key, Long.toString(cloudLatte))).isEqualTo(0.0);
+    }
+
+    @Test
+    void 만료돼_없어진_날짜_키는_다시_만들지_않는다() {
+        popularMenuRepository.decrease(TODAY, Map.of(americano, 1));
+
+        assertThat(redisTemplate.hasKey(PopularMenuRepositoryKeys.today())).isFalse();
+    }
+
+    @Test
+    void 차감해도_키의_만료_시각은_그대로다() {
+        popularMenuRepository.increase(TODAY, Map.of(americano, 2));
+        Long before = redisTemplate.getExpire(PopularMenuRepositoryKeys.today());
+
+        popularMenuRepository.decrease(TODAY, Map.of(americano, 1));
+
+        assertThat(redisTemplate.getExpire(PopularMenuRepositoryKeys.today())).isBetween(before - 5, before);
     }
 
     // ---- 도우미 ----

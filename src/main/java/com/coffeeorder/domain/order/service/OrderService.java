@@ -9,8 +9,10 @@ import com.coffeeorder.domain.order.dto.OrderResponse;
 import com.coffeeorder.domain.order.dto.OrderSummaryResponse;
 import com.coffeeorder.domain.order.entity.Order;
 import com.coffeeorder.domain.order.entity.OrderItem;
+import com.coffeeorder.domain.order.entity.OrderStatus;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent;
 import com.coffeeorder.domain.order.event.OrderCompletedEvent.OrderedMenu;
+import com.coffeeorder.domain.order.event.OrderRefundedEvent;
 import com.coffeeorder.domain.order.repository.OrderItemRepository;
 import com.coffeeorder.domain.order.repository.OrderRepository;
 import com.coffeeorder.domain.point.entity.Point;
@@ -56,14 +58,7 @@ public class OrderService {
         // 락 조회를 맨 처음에 한다. 일반 조회(사용자 확인 등)를 먼저 하면 MySQL REPEATABLE READ 의 읽기 시점이
         // 락을 잡기 전으로 고정돼, 뒤의 메뉴 조회가 락 대기 중 바뀐 가격을 보지 못한다(CodeRabbit PR #8).
         // Point 를 처음 읽는 곳이기도 해야 한다(먼저 일반 조회하면 락 조회가 메모리의 옛 잔액을 돌려준다)
-        Optional<Point> lockedPoint = pointRepository.findByUserIdForUpdate(userId);
-        if (lockedPoint.isEmpty()) {
-            if (!userRepository.existsById(userId)) {
-                throw new BusinessException(ErrorCode.USER_NOT_FOUND);
-            }
-            throw new IllegalStateException("포인트 행이 없는 사용자: " + userId);
-        }
-        Point point = lockedPoint.get();
+        Point point = lockPoint(userId);
 
         List<CartItem> cartItems = cartItemRepository.findAllByUserIdForUpdate(userId);
         if (cartItems.isEmpty()) {
@@ -124,6 +119,53 @@ public class OrderService {
         Order order = orderRepository.findByIdAndUserId(orderId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         return OrderDetailResponse.of(order, orderItemRepository.findByOrderIdOrderById(orderId));
+    }
+
+    /**
+     * 전체 환불(노션 5-5). 한 트랜잭션이라 중간에 실패하면 잔액·내역·주문 상태 모두 롤백된다.
+     * 순서: 포인트 락 → 주문 조회(소유자 조건) → 상태 확인 → 잔액 복구·환불 내역 → 상태 REFUNDED → 커밋 후 인기 메뉴 차감.
+     * - 소유자 확인을 상태 확인보다 먼저 한다. 반대면 남의 환불된 주문에 ALREADY_REFUNDED 가 나가 그 주문이 있다는 게 드러난다.
+     * - 같은 주문 동시 환불: 주문은 그 사용자 것이므로 포인트 락으로 줄을 선다. 주문 조회가 락을 잡은 뒤의 첫 일반 조회라,
+     *   두 번째 요청은 앞 요청이 커밋한 REFUNDED 를 보고 ALREADY_REFUNDED 가 된다(REPEATABLE READ 읽기 시점, 주문 API 와 같은 이유).
+     */
+    @Transactional
+    public OrderResponse refund(Long userId, Long orderId) {
+        Point point = lockPoint(userId);
+        Order order = orderRepository.findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (order.getStatus() == OrderStatus.REFUNDED) {
+            throw new BusinessException(ErrorCode.ALREADY_REFUNDED);
+        }
+
+        long amount = order.getTotalPrice();
+        point.refund(amount);
+        pointHistoryRepository.save(
+                new PointHistory(point.getUser(), order, PointHistoryType.REFUND, amount, point.getBalance()));
+        order.refund();
+
+        List<OrderItem> orderItems = orderItemRepository.findByOrderIdOrderById(orderId);
+        eventPublisher.publishEvent(new OrderRefundedEvent(orderId,
+                orderItems.stream().map(item -> new OrderedMenu(item.getMenu().getId(), item.getQuantity())).toList(),
+                order.getCreatedAt()));
+        // 응답은 주문 응답과 같은 형태(노션 5-5, 11/20): balance 는 환불 후 잔액
+        return new OrderResponse(orderId, amount, point.getBalance(), order.getCreatedAt(),
+                orderItems.stream().map(OrderResponse.Item::from).toList());
+    }
+
+    /**
+     * 포인트 행을 비관적 락으로 잡는다. 주문·환불 모두 트랜잭션의 첫 조회여야 한다 — 일반 조회를 먼저 하면
+     * MySQL REPEATABLE READ 읽기 시점이 락을 잡기 전으로 고정되고(CodeRabbit PR #8), 락 조회가 메모리의 옛 잔액을 돌려준다.
+     * 행이 없을 때만 사용자 존재를 확인해 USER_NOT_FOUND 를 가린다.
+     */
+    private Point lockPoint(Long userId) {
+        Optional<Point> lockedPoint = pointRepository.findByUserIdForUpdate(userId);
+        if (lockedPoint.isPresent()) {
+            return lockedPoint.get();
+        }
+        if (!userRepository.existsById(userId)) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        throw new IllegalStateException("포인트 행이 없는 사용자: " + userId);
     }
 
     private void validateUser(Long userId) {
