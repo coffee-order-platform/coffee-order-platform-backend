@@ -32,7 +32,7 @@ class MenuControllerTest {
         MockHttpServletResponse res = mockMvc.perform(get("/api/menus")).andReturn().getResponse();
 
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(
-                "{\"status\":200,\"message\":\"메뉴 목록 조회 성공\","
+                "{\"status\":200,\"message\":null,"
                         + "\"data\":[{\"menuId\":1,\"name\":\"아메리카노\",\"price\":4500}]}");
     }
 
@@ -43,7 +43,7 @@ class MenuControllerTest {
         MockHttpServletResponse res = mockMvc.perform(get("/api/menus")).andReturn().getResponse();
 
         assertThat(res.getContentAsString(UTF_8))
-                .isEqualTo("{\"status\":200,\"message\":\"메뉴 목록 조회 성공\",\"data\":[]}");
+                .isEqualTo("{\"status\":200,\"message\":null,\"data\":[]}");
     }
 
     @Test

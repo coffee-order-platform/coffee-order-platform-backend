@@ -39,7 +39,7 @@ public class PointController {
 
     @GetMapping
     public ApiResponse<BalanceResponse> getBalance(@PathVariable Long userId) {
-        return ApiResponse.ok("포인트 잔액 조회 성공", pointService.getBalance(userId));
+        return ApiResponse.ok(pointService.getBalance(userId));
     }
 
     /** size 는 1~100(기본 10), cursor 는 양수. 범위 밖은 INVALID_REQUEST. */
@@ -48,6 +48,6 @@ public class PointController {
             @PathVariable Long userId,
             @RequestParam(required = false) @Positive Long cursor,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
-        return ApiResponse.ok("포인트 내역 조회 성공", pointService.getHistories(userId, cursor, size));
+        return ApiResponse.ok(pointService.getHistories(userId, cursor, size));
     }
 }

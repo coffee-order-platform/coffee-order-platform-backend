@@ -35,7 +35,7 @@ public class CartController {
 
     @GetMapping
     public ApiResponse<CartResponse> getCart(@PathVariable Long userId) {
-        return ApiResponse.ok("장바구니 조회 성공", cartService.getCart(userId));
+        return ApiResponse.ok(cartService.getCart(userId));
     }
 
     @PatchMapping("/items/{menuId}")

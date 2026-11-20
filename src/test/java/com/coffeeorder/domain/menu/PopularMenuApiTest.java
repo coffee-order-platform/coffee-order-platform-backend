@@ -76,14 +76,14 @@ class PopularMenuApiTest {
 
     @Test
     void P1_판매_기록이_없으면_빈_목록() throws Exception {
-        assertThat(body()).isEqualTo("{\"status\":200,\"message\":\"인기 메뉴 조회 성공\",\"data\":[]}");
+        assertThat(body()).isEqualTo("{\"status\":200,\"message\":null,\"data\":[]}");
     }
 
     @Test
     void 응답은_순위_메뉴_판매_수량을_담는다() throws Exception {
         popularMenuRepository.increase(TODAY, Map.of(americano, 3));
 
-        assertThat(body()).isEqualTo("{\"status\":200,\"message\":\"인기 메뉴 조회 성공\",\"data\":["
+        assertThat(body()).isEqualTo("{\"status\":200,\"message\":null,\"data\":["
                 + "{\"rank\":1,\"menuId\":" + americano + ",\"name\":\"아메리카노\",\"price\":4500,\"salesCount\":3}]}");
     }
 

@@ -21,11 +21,11 @@ public class MenuController {
 
     @GetMapping
     public ApiResponse<List<MenuResponse>> findAll() {
-        return ApiResponse.ok("메뉴 목록 조회 성공", menuService.findAll());
+        return ApiResponse.ok(menuService.findAll());
     }
 
     @GetMapping("/popular")
     public ApiResponse<List<PopularMenuResponse>> findPopular() {
-        return ApiResponse.ok("인기 메뉴 조회 성공", popularMenuService.getTop3());
+        return ApiResponse.ok(popularMenuService.getTop3());
     }
 }

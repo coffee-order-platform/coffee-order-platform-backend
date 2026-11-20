@@ -193,7 +193,7 @@ class PointApiTest {
 
         assertThat(res.getStatus()).isEqualTo(200);
         assertThat(res.getContentAsString(UTF_8))
-                .isEqualTo("{\"status\":200,\"message\":\"포인트 잔액 조회 성공\",\"data\":{\"balance\":150000}}");
+                .isEqualTo("{\"status\":200,\"message\":null,\"data\":{\"balance\":150000}}");
     }
 
     @Test
@@ -333,7 +333,7 @@ class PointApiTest {
                 .andReturn().getResponse();
 
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(
-                "{\"status\":200,\"message\":\"포인트 내역 조회 성공\","
+                "{\"status\":200,\"message\":null,"
                         + "\"data\":{\"content\":[],\"nextCursor\":null,\"hasNext\":false}}");
     }
 
