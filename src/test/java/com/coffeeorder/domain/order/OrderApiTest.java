@@ -45,7 +45,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * 노션 테스트 케이스 O(주문·결제)를 실제 MySQL 에서 확인한다. 테스트마다 자기 사용자를 만들고 끝나면 롤백된다.
  * 롤백이라 커밋 후 처리(Mock 전송)는 돌지 않는다 → 여기서는 이벤트 발행만 보고, 전송은 OrderEventListenerTest·OrderEventWiringTest 가 본다.
- * 실제 스레드 동시 주문(X-1, X-2)은 커밋이 필요해 11/20 동시성 테스트(D-12)에서 다룬다.
+ * 실제 스레드 동시 주문(X-1, X-2)은 커밋이 필요해 ConcurrencyRegressionTest 에서 다룬다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -257,7 +257,7 @@ class OrderApiTest {
 
     @Test
     void 주문용_장바구니_조회는_행을_잠근다() throws Exception {
-        // 실제 잠금 대기는 커밋이 필요해 11/20 에 본다. 여기서는 잠금 쿼리가 배타 락인지 고정한다
+        // 실제 잠금 대기는 커밋이 필요해 ConcurrencyRegressionTest X-2 가 본다. 여기서는 잠금 쿼리가 배타 락인지 고정한다
         Lock lock = CartItemRepository.class.getMethod("findAllByUserIdForUpdate", Long.class)
                 .getAnnotation(Lock.class);
         assertThat(lock).isNotNull();
@@ -485,7 +485,7 @@ class OrderApiTest {
     @Test
     void 환불_서비스에는_트랜잭션이_걸려_있다() {
         // 이 클래스 전체가 @Transactional 이라, 서비스의 애너테이션이 빠지거나 readOnly 가 돼도 다른 테스트는 모른다.
-        // 같은 주문 동시 환불(1건만 성공)은 리뷰어가 실험으로 확인(8스레드×15회), 커밋형 테스트는 D-12 동시성 테스트에서 추가
+        // 같은 주문 동시 환불(1건만 성공)은 ConcurrencyRegressionTest R-8 이 커밋형으로 확인한다
         Transactional tx = org.springframework.util.ReflectionUtils.findMethod(
                 OrderService.class, "refund", Long.class, Long.class).getAnnotation(Transactional.class);
         assertThat(tx).isNotNull();
