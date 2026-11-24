@@ -107,9 +107,11 @@ class ConcurrencyRegressionTest {
         assertThat(historyCount(userId, "USE")).isEqualTo(successes);
         assertThat(used).isEqualTo(count("SELECT COALESCE(SUM(oi.line_price), 0) FROM order_items oi "
                 + "JOIN orders o ON o.id = oi.order_id WHERE o.user_id = ?", userId));
-        // 잔 수 보존: 주문된 잔 + 장바구니에 남은 잔 = 담은 잔(메뉴 5종 1잔씩). 사라지거나 두 번 주문된 잔이 없다
-        long ordered = count("SELECT COUNT(*) FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.user_id = ?", userId);
-        long left = count("SELECT COUNT(*) FROM cart_items WHERE user_id = ?", userId);
+        // 잔 수 보존: 주문된 잔 + 장바구니에 남은 잔 = 담은 잔(메뉴 5종 1잔씩). 사라지거나 두 번 주문되거나 수량이 늘어난 잔이 없다
+        // (행 개수가 아니라 수량 합계로 센다 — 한 행의 수량이 잘못 늘어도 잡히게, CodeRabbit PR #16)
+        long ordered = count("SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi JOIN orders o ON o.id = oi.order_id "
+                + "WHERE o.user_id = ?", userId);
+        long left = count("SELECT COALESCE(SUM(quantity), 0) FROM cart_items WHERE user_id = ?", userId);
         assertThat(ordered + left).isEqualTo(menus.size());
         assertBalanceMatchesLastHistory(userId);
     }

@@ -141,6 +141,12 @@ class LockExperimentTest {
             if (!e.getKey().equals("락 없음")) {
                 assertThat(r.finalBalance).as(e.getKey() + " 잔액").isEqualTo(START_BALANCE - r.success * AMOUNT);
             }
+            // 잔액이 딱 맞게 충분하므로(100건 × 1,000 = 100,000) 충돌 거절이 없는 방식은 전부 성공해야 한다.
+            // 낙관적 락만 충돌을 거절로 돌려주는 방식이라 거절을 허용한다(CodeRabbit PR #16)
+            if (!e.getKey().startsWith("낙관적")) {
+                assertThat(r.success).as(e.getKey() + " 성공 수").isEqualTo(REQUESTS);
+                assertThat(r.intended).as(e.getKey() + " 의도한 실패").isZero();
+            }
         }
     }
 

@@ -52,14 +52,24 @@ public final class ConcurrentRunner {
             long begin = System.nanoTime();
             start.countDown();
             List<Outcome> outcomes = new ArrayList<>();
+            long deadline = begin + TimeUnit.SECONDS.toNanos(60); // 전체가 60초 안에 끝나야 한다(요청마다 60초가 아니다)
             for (Future<Outcome> future : futures) {
                 try {
-                    outcomes.add(future.get(60, TimeUnit.SECONDS));
+                    outcomes.add(future.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS));
+                } catch (InterruptedException e) {
+                    throw e; // 테스트 자체가 취소됐다 → 결과로 삼키지 않고 호출자에게 알린다(finally 가 작업에 멈추라고 요청한다)
                 } catch (Exception e) {
-                    outcomes.add(new Outcome(TimeUnit.SECONDS.toNanos(60), e)); // 60초 안에 안 끝나면 사고(타임아웃)
+                    outcomes.add(new Outcome(System.nanoTime() - begin, e)); // 60초 안에 안 끝나면 사고(타임아웃)
                 }
             }
-            return new Run(outcomes, System.nanoTime() - begin);
+            long totalNanos = System.nanoTime() - begin;
+            // 시간 초과된 작업은 아직 돌고 있을 수 있다. 반환 뒤에 커밋하면 다음 측정·테스트의 데이터를 오염시키므로,
+            // 끝날 때까지 기다리고 그래도 안 끝나면 결과를 믿을 수 없어 멈춘다(MySQL 잠금 대기는 innodb_lock_wait_timeout 50초에서 끝난다)
+            pool.shutdownNow();
+            if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("시간 초과된 작업이 끝나지 않아 결과를 믿을 수 없다");
+            }
+            return new Run(outcomes, totalNanos);
         } finally {
             pool.shutdownNow();
         }
