@@ -22,7 +22,7 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_DATABASE: coffee_order
+          MYSQL_DATABASE: coffee_order_test # 테스트 설정(src/test/resources/config/application.yml)의 스키마 이름과 같아야 한다
           MYSQL_USER: coffee
           MYSQL_PASSWORD: ci-password
           MYSQL_ROOT_PASSWORD: ci-root-password
