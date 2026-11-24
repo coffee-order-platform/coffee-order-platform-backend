@@ -62,12 +62,16 @@ class ConcurrentRunnerTest {
             }
         });
         caller.start();
-        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue(); // 세 작업이 모두 돌기 시작한 뒤에 중단한다
-        caller.interrupt();
-        caller.join(300);
-        assertThat(caller.isAlive()).as("작업이 살아 있는 동안에는 run() 이 돌아오지 않는다").isTrue();
-        release.countDown();
-        caller.join(TimeUnit.SECONDS.toMillis(10));
+        try {
+            assertThat(started.await(5, TimeUnit.SECONDS)).isTrue(); // 세 작업이 모두 돌기 시작한 뒤에 중단한다
+            caller.interrupt();
+            caller.join(300);
+            assertThat(caller.isAlive()).as("작업이 살아 있는 동안에는 run() 이 돌아오지 않는다").isTrue();
+        } finally {
+            // 위 단언이 실패해도 작업을 풀어 줘서, 멈추지 않는 스레드가 다음 테스트까지 남지 않게 한다(CodeRabbit PR #16)
+            release.countDown();
+            caller.join(TimeUnit.SECONDS.toMillis(10));
+        }
 
         assertThat(thrown.get()).isInstanceOf(InterruptedException.class);
         assertThat(finishedWhenThrown.get()).as("중단을 알릴 때 이미 끝난 작업 수").isEqualTo(3);

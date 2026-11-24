@@ -19,7 +19,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.orm.jpa.hibernate.HibernateExceptionTranslator;
 
-/** 재시도 횟수 규칙(노션 9-1): 낙관적 락 충돌 2회 재시도 후 409, 장바구니 UNIQUE 위반만 1회 재시도. 교착 1회 재시도는 11/24 결정(노션 반영 대기). */
+/** 재시도 횟수 규칙(노션 9-1): 낙관적 락 충돌 2회 재시도 후 409, 장바구니 UNIQUE 위반만 1회 재시도. 교착 1회 재시도는 11/24 결정(노션 기술 명세 3). */
 class CartRetryExecutorTest {
 
     private final CartRetryExecutor executor = new CartRetryExecutor();
