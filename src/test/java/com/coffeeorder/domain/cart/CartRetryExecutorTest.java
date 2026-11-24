@@ -6,15 +6,20 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.coffeeorder.domain.cart.service.CartRetryExecutor;
 import com.coffeeorder.global.exception.BusinessException;
 import com.coffeeorder.global.exception.ErrorCode;
+import jakarta.persistence.PessimisticLockException;
 import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.hibernate.dialect.MySQLDialect;
 import org.hibernate.exception.ConstraintViolationException;
 import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
+import org.hibernate.exception.LockAcquisitionException;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.orm.jpa.hibernate.HibernateExceptionTranslator;
 
-/** 재시도 횟수 규칙(노션 9-1): 낙관적 락 충돌 2회 재시도 후 409, 장바구니 UNIQUE 위반만 1회 재시도. */
+/** 재시도 횟수 규칙(노션 9-1): 낙관적 락 충돌 2회 재시도 후 409, 장바구니 UNIQUE 위반만 1회 재시도. 교착 1회 재시도는 11/24 결정(노션 반영 대기). */
 class CartRetryExecutorTest {
 
     private final CartRetryExecutor executor = new CartRetryExecutor();
@@ -103,6 +108,67 @@ class CartRetryExecutorTest {
             assertThatThrownBy(() -> executor.run(failing(calls, 5, other))).as(label).isSameAs(other);
             assertThat(calls.get()).as(label).isEqualTo(1);
         }
+    }
+
+    /** 스프링이 MySQL 잠금 실패를 감싸 던지는 모양: CannotAcquireLockException ← Hibernate LockAcquisitionException ← SQLException */
+    private static CannotAcquireLockException lockFailure(String sqlState, int mysqlError) {
+        return new CannotAcquireLockException("lock",
+                new LockAcquisitionException("lock", new SQLException("lock", sqlState, mysqlError)));
+    }
+
+    private static CannotAcquireLockException deadlock() {
+        return lockFailure("40001", 1213); // Deadlock found when trying to get lock
+    }
+
+    @Test
+    void 교착은_1번_재시도한다() {
+        AtomicInteger calls = new AtomicInteger();
+
+        executor.run(failing(calls, 1, deadlock()));
+
+        assertThat(calls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void 교착이_2번이면_CART_UPDATE_CONFLICT다() {
+        AtomicInteger calls = new AtomicInteger();
+
+        assertThatThrownBy(() -> executor.run(failing(calls, 2, deadlock())))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.CART_UPDATE_CONFLICT));
+        assertThat(calls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void 교착이_아닌_잠금_실패는_재시도하지_않고_그대로_던진다() {
+        CannotAcquireLockException timeout = lockFailure("HY000", 1205); // Lock wait timeout exceeded: 이미 오래 기다렸다
+        AtomicInteger calls = new AtomicInteger();
+
+        assertThatThrownBy(() -> executor.run(failing(calls, 5, timeout))).isSameAs(timeout);
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void 원인을_알_수_없는_잠금_실패는_재시도하지_않는다() {
+        CannotAcquireLockException unknown = new CannotAcquireLockException("원인 없음");
+        AtomicInteger calls = new AtomicInteger();
+
+        assertThatThrownBy(() -> executor.run(failing(calls, 5, unknown))).isSameAs(unknown);
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void 실제_MySQL_교착_오류를_Hibernate와_스프링이_바꾼_예외도_교착으로_알아본다() {
+        // 손으로 만든 예외 모양이 라이브러리를 올린 뒤에도 실제와 같은지 지킨다: MySQL 1213 → Hibernate 변환 → JPA 예외 → 스프링 변환
+        RuntimeException hibernate = new MySQLDialect().buildSQLExceptionConversionDelegate().convert(
+                new SQLException("Deadlock found when trying to get lock", "40001", 1213), "insert", "insert into cart_items");
+        RuntimeException spring = new HibernateExceptionTranslator().translateExceptionIfPossible(
+                new PessimisticLockException("insert", hibernate));
+        AtomicInteger calls = new AtomicInteger();
+
+        assertThat(spring).isInstanceOf(CannotAcquireLockException.class);
+        executor.run(failing(calls, 1, spring));
+        assertThat(calls.get()).isEqualTo(2);
     }
 
     @Test
