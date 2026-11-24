@@ -202,7 +202,8 @@ class ConcurrencyRegressionTest {
             });
             Thread.sleep(500); // 두 담기가 줄을 설 시간. 모자라면 교착이 안 날 뿐 결과 단언은 같다(거짓 실패는 없다)
             held.commit(); // 3)
-            outcomes = adds.get(60, TimeUnit.SECONDS);
+            // ConcurrentRunner 의 작업 대기(60초) + 종료 대기(60초)보다 길게 기다린다. 더 짧으면 담기가 아직 도는 중에 정리가 시작될 수 있다
+            outcomes = adds.get(150, TimeUnit.SECONDS);
         }
 
         assertCounts(outcomes, 2, Map.of()); // 교착으로 진 쪽은 통째로 취소되고, 다시 하면 이긴 쪽 행에 수량을 더한다

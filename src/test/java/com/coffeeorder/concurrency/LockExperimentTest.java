@@ -146,6 +146,9 @@ class LockExperimentTest {
             if (!e.getKey().startsWith("낙관적")) {
                 assertThat(r.success).as(e.getKey() + " 성공 수").isEqualTo(REQUESTS);
                 assertThat(r.intended).as(e.getKey() + " 의도한 실패").isZero();
+            } else {
+                // 충돌 거절은 허용하지만, 같은 버전을 읽은 요청 중 하나는 반드시 이긴다 → 전부 거절이면 버전 조건이 깨진 것
+                assertThat(r.success).as(e.getKey() + " 성공 수").isPositive();
             }
         }
     }
