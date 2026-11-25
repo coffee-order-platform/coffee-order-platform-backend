@@ -186,6 +186,22 @@ class OrderApiTest {
     }
 
     @Test
+    void O5_잔액이_총액보다_1원_모자라도_INSUFFICIENT_POINT_이고_잔액_장바구니_주문이_그대로다() throws Exception {
+        // O6(딱 맞으면 성공)의 바로 아래 경계. 비교가 <= 로 바뀌거나 1원 오차가 생기면 실패한다(CodeRabbit PR #17)
+        User short1 = createUser("1원부족테스터", 4_499);
+        putInCart(short1, americano, 1); // 4,500원
+
+        MockHttpServletResponse res = order(short1.getId());
+
+        assertThat(res.getStatus()).isEqualTo(400);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(INSUFFICIENT_POINT);
+        assertThat(balanceInDb(short1)).isEqualTo(4_499L);
+        assertThat(cartCount(short1)).isEqualTo(1);
+        assertThat(orderCount(short1)).isZero();
+        assertThat(historyCount(short1)).isZero();
+    }
+
+    @Test
     void O6_잔액이_총액과_딱_같으면_주문되고_잔액은_0이다() throws Exception {
         User exact = createUser("딱맞는테스터", 4_500);
         putInCart(exact, americano, 1);
