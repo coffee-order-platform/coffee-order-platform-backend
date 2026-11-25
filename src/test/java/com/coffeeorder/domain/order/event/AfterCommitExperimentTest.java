@@ -96,6 +96,13 @@ class AfterCommitExperimentTest {
         assertThat(orders).as("롤백돼 DB 에는 주문이 없다").isZero();
         assertThat(inTx).as("트랜잭션 안 방식: 롤백과 상관없이 Redis 에 이미 더해져 남는다").isEqualTo(ORDERS * 2.0);
         assertThat(afterCommit).as("커밋 후 방식(실제 코드): 커밋이 없으니 집계에 0건").isNull();
+
+        // 대조군: 롤백 없이 커밋한 주문 1건은 실제 리스너가 같은 오늘 키에 2잔을 더한다.
+        // 그래야 위의 null 이 "리스너가 안 돈다·다른 키에 쓴다"가 아니라 "롤백이라 안 썼다"는 뜻이 된다
+        long committedUser = createUser(10_000);
+        cartService.add(committedUser, americano, 2);
+        orderService.order(committedUser);
+        assertThat(redis.opsForZSet().score(key(LocalDate.now(clock)), String.valueOf(americano))).isEqualTo(2.0);
     }
 
     private long createUser(long balance) {
