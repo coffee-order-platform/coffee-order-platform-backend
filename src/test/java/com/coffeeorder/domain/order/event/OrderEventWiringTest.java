@@ -62,6 +62,7 @@ class OrderEventWiringTest {
 
         transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(event));
 
+        verify(orderDataSender, times(1)).send(event); // 전송이 실제로 시도돼 실패한 경우여야 한다(CodeRabbit PR #17)
         assertThat(redisTemplate.opsForZSet().score(KEY, "1")).isEqualTo(2.0);
         assertThat(redisTemplate.opsForZSet().score(KEY, "2")).isEqualTo(1.0);
     }
