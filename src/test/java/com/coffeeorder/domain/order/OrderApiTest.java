@@ -198,6 +198,9 @@ class OrderApiTest {
         assertThat(res.getContentAsString(UTF_8)).isEqualTo(INSUFFICIENT_POINT);
         assertThat(balanceInDb(short1)).isEqualTo(4_499L);
         assertThat(cartCount(short1)).isEqualTo(1);
+        // 행 수만으로는 수량이 바뀐 실패를 못 잡는다 → 담은 메뉴와 수량까지 그대로인지 본다(CodeRabbit PR #18)
+        assertThat(jdbc.queryForMap("SELECT menu_id, quantity FROM cart_items WHERE user_id = ?", short1.getId()))
+                .containsEntry("menu_id", americano).containsEntry("quantity", 1);
         assertThat(orderCount(short1)).isZero();
         assertThat(historyCount(short1)).isZero();
     }
