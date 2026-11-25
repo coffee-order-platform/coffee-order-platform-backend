@@ -1,6 +1,7 @@
 package com.coffeeorder.domain.order.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -50,6 +51,17 @@ class OrderEventWiringTest {
         transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(event));
 
         verify(orderDataSender, times(1)).send(event);
+        assertThat(redisTemplate.opsForZSet().score(KEY, "1")).isEqualTo(2.0);
+        assertThat(redisTemplate.opsForZSet().score(KEY, "2")).isEqualTo(1.0);
+    }
+
+    @Test
+    void 주문_데이터_전송이_실패해도_인기_메뉴에는_수량을_더한다() {
+        // 두 후처리는 서로 다른 리스너라 하나가 실패해도 다른 하나는 돈다. Redis 가 꺼진 반대 경우는 RedisDownTest 가 본다
+        doThrow(new IllegalStateException("전송 서버 다운")).when(orderDataSender).send(event);
+
+        transactionTemplate.executeWithoutResult(status -> eventPublisher.publishEvent(event));
+
         assertThat(redisTemplate.opsForZSet().score(KEY, "1")).isEqualTo(2.0);
         assertThat(redisTemplate.opsForZSet().score(KEY, "2")).isEqualTo(1.0);
     }
