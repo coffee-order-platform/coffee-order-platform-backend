@@ -8,6 +8,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
@@ -16,8 +19,20 @@ class CoffeeOrderApplicationTests {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private RedisConnectionFactory redisConnectionFactory;
+
     @Test
     void contextLoads() {
+    }
+
+    @Test
+    void 테스트는_개발_DB가_아니라_테스트_전용_스키마와_Redis_1번_DB를_쓴다() {
+        assertThat(jdbc.queryForObject("SELECT DATABASE()", String.class)).isEqualTo("coffee_order_test");
+        assertThat(((LettuceConnectionFactory) redisConnectionFactory).getDatabase()).isEqualTo(1);
     }
 
     @Test

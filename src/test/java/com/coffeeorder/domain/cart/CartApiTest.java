@@ -42,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 테스트마다 자기 사용자를 만들고 롤백한다. 메뉴는 시드 메뉴를 이름으로 찾는다(ID 하드코딩 금지).
  * 재시도 규칙은 CartRetryExecutorTest, 컨트롤러 → 재시도 → 409 배선은 CartRetryWiringTest 에서 확인한다.
  * 실제 MySQL 의 UNIQUE 위반 예외를 재시도기가 알아보는지(제약 이름 모양)는 여기서 확인한다.
- * 실제 스레드 동시 충돌과 서비스 트랜잭션 자체(X-5, X-6)는 커밋이 필요해 11/20 동시성 테스트(D-10)에서 다룬다.
+ * 실제 스레드 동시 충돌과 서비스 트랜잭션 자체(X-5, X-6)는 커밋이 필요해 ConcurrencyRegressionTest 에서 다룬다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

@@ -31,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 컨트롤러가 재시도기를 거쳐 서비스를 부르는지, 충돌이 계속되면 HTTP 409 가 나가는지 확인한다.
- * 서비스가 충돌 예외를 던지게 흉내 내므로 커밋이 필요 없다(실제 스레드 경합은 D-10, 11/20).
+ * 서비스가 충돌 예외를 던지게 흉내 내므로 커밋이 필요 없다(실제 스레드 경합은 ConcurrencyRegressionTest X-5, X-6).
  */
 @SpringBootTest
 @AutoConfigureMockMvc

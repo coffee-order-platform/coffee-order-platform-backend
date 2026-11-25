@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 테스트마다 트랜잭션 안에서 테이블을 비운 뒤 시더를 직접 실행한다. 끝나면 롤백되므로
- * 로컬 개발 DB 데이터는 그대로 남고, 이전 실행이나 다른 테스트가 남긴 데이터에도 흔들리지 않는다.
+ * 테스트 전용 스키마(coffee_order_test)의 데이터는 그대로 남고, 이전 실행이나 다른 테스트가 남긴 데이터에도 흔들리지 않는다.
  */
 @SpringBootTest
 @Transactional
@@ -66,7 +66,7 @@ class DataInitializerIntegrationTest {
     @Test
     void run_에는_사용자와_포인트를_한_트랜잭션으로_묶는_애너테이션이_있다() throws Exception {
         // 지우면 포인트 저장이 실패할 때 포인트 없는 사용자가 남는다.
-        // 실제 롤백 확인은 커밋된 빈 DB 가 필요해 로컬 개발 DB 를 지워야 하므로 애너테이션을 고정한다.
+        // 실제 롤백 확인(커밋형)은 테스트 전용 스키마가 생겨 이제 할 수 있지만 아직 하지 않아, 그때까지 애너테이션을 고정한다.
         assertThat(DataInitializer.class.getMethod("run", ApplicationArguments.class)
                         .isAnnotationPresent(Transactional.class))
                 .isTrue();
