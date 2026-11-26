@@ -25,7 +25,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * created_at 이 아니라 id 로 정렬한다.
  * 실제 point_histories 는 FK 때문에 user_id 인덱스가 이미 있어 "인덱스 없음"을 만들 수 없다 → FK 없는 실험용 표(exp_index_histories)에서
  * 인덱스만 바꿔 같은 쿼리를 돌린다: 없음 / (user_id) = 지금 실제 표와 같은 상태 / (user_id, created_at) = 처음 계획한 인덱스 / (user_id, id).
- * 평소 테스트에서는 건너뛴다. 실행: EXPERIMENT=true ./gradlew test --tests '*HistoryIndexExperimentTest' -i
+ * 평소 테스트에서는 건너뛴다. 실행: EXPERIMENT=true ./gradlew test --tests '*HistoryIndexExperimentTest' --rerun-tasks -i
+ * (--rerun-tasks: 소스가 그대로면 Gradle 이 이전 결과를 재사용해 테스트를 건너뛸 수 있어서. 환경 변수만 바꾼 경우도 마찬가지)
  * 결과: build/experiment/history-index-experiment.txt + 콘솔(-i 를 붙여야 보인다)
  */
 @SpringBootTest
@@ -72,21 +73,26 @@ class HistoryIndexExperimentTest {
     @Test
     void 인덱스_4가지_EXPLAIN_과_조회_시간_비교() throws IOException {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM exp_index_histories", Long.class)).isEqualTo(100_000L);
-        long cursor = jdbc.queryForObject( // 두 번째 페이지 커서 = 첫 페이지에 보여 줄 size 건 중 마지막 id
-                "SELECT MIN(id) FROM (SELECT id FROM exp_index_histories WHERE user_id = ? ORDER BY id DESC LIMIT " + SIZE
-                        + ") p", Long.class, TARGET_USER);
+        // 인덱스와 상관없이 구한 그 사용자의 id 전체(최신순). 커서와 다음 페이지 기대값을 여기서 뽑는다
+        List<Long> allIds = jdbc.queryForList(
+                "SELECT id FROM exp_index_histories WHERE user_id = ? ORDER BY id DESC", Long.class, TARGET_USER);
+        long cursor = allIds.get(SIZE - 1); // 두 번째 페이지 커서 = 첫 페이지에 보여 줄 size 건 중 마지막 id
+        long oldest = allIds.getLast();
+        List<Long> expectedNext = allIds.subList(SIZE, SIZE + FETCH); // 커서 자신은 빠지고 그다음부터
+        assertThat(expectedNext).doesNotContain(cursor);
 
         List<String> report = new ArrayList<>();
         report.add("[EXP-5] 내역 10만 건, 사용자 " + USERS + "명 × 100건, 조회 대상 1명, size " + SIZE + "(실제로 읽는 건수 "
                 + FETCH + "), 예열 " + WARMUP + "회 뒤 " + RUNS + "회 평균");
-        Result none = measure("없음", null, cursor, report);
-        Result userId = measure("(user_id)", "CREATE INDEX idx_user ON exp_index_histories (user_id)", cursor, report);
+        Result none = measure("없음", null, cursor, oldest, report);
+        Result userId = measure("(user_id)", "CREATE INDEX idx_user ON exp_index_histories (user_id)", cursor, oldest, report);
         jdbc.execute("DROP INDEX idx_user ON exp_index_histories");
         Result userCreated = measure("(user_id, created_at)",
-                "CREATE INDEX idx_user_created ON exp_index_histories (user_id, created_at)", cursor, report);
+                "CREATE INDEX idx_user_created ON exp_index_histories (user_id, created_at)", cursor, oldest, report);
         jdbc.execute("DROP INDEX idx_user_created ON exp_index_histories");
         // (user_id) 도 안쪽에 id 를 품지만, 커서 페이지에서 옵티마이저가 다른 길(index_merge + 정렬)을 골라 id 를 직접 적어 비교한다
-        Result userIdId = measure("(user_id, id)", "CREATE INDEX idx_user_id ON exp_index_histories (user_id, id)", cursor, report);
+        Result userIdId = measure("(user_id, id)", "CREATE INDEX idx_user_id ON exp_index_histories (user_id, id)",
+                cursor, oldest, report);
 
         report.forEach(System.out::println);
         Path out = Path.of("build", "experiment", "history-index-experiment.txt");
@@ -96,6 +102,11 @@ class HistoryIndexExperimentTest {
         // 인덱스가 바뀌어도 결과(같은 건들)는 같아야 비교가 의미 있다
         assertThat(userId.firstIds).isEqualTo(none.firstIds).isEqualTo(userCreated.firstIds).isEqualTo(userIdId.firstIds)
                 .hasSize(FETCH);
+        // 다음 페이지도 인덱스마다 같고, 커서 다음 건부터 나온다(커서 자신이 다시 나오면 실패). 가장 오래된 건 다음은 비어 있다
+        for (Result r : List.of(none, userId, userCreated, userIdId)) {
+            assertThat(r.nextIds).as(r.label).isEqualTo(expectedNext);
+            assertThat(r.afterOldestIds).as(r.label).isEmpty();
+        }
         // EXPLAIN 의 rows 는 예상치라 판정은 EXPLAIN ANALYZE 의 실제 행 수로 한다
         assertThat(userId.firstRead).as("(user_id) 인덱스면 첫 페이지는 딱 size+1 건만 읽는다").isEqualTo(FETCH);
         assertThat(String.valueOf(userId.first.get("Extra"))).doesNotContain("filesort");
@@ -104,9 +115,10 @@ class HistoryIndexExperimentTest {
         assertThat(userId.emptyRead).isZero();
     }
 
-    private record Result(Map<String, Object> first, long firstRead, long emptyRead, List<Long> firstIds) {}
+    private record Result(String label, Map<String, Object> first, long firstRead, long emptyRead, List<Long> firstIds,
+            List<Long> nextIds, List<Long> afterOldestIds) {}
 
-    private Result measure(String label, String createIndex, long cursor, List<String> report) {
+    private Result measure(String label, String createIndex, long cursor, long oldest, List<String> report) {
         if (createIndex != null) {
             jdbc.execute(createIndex);
         }
@@ -121,7 +133,10 @@ class HistoryIndexExperimentTest {
         report.add(line("", "다음 페이지(커서)", next, nextRead, averageMs(NEXT_PAGE, TARGET_USER, cursor)));
         report.add(line("", "첫 페이지(내역 0건 사용자)", empty, emptyRead, averageMs(FIRST_PAGE, EMPTY_USER)));
         List<Long> ids = jdbc.queryForList(FIRST_PAGE.replace("SELECT *", "SELECT id"), Long.class, TARGET_USER);
-        return new Result(first, firstRead, emptyRead, ids);
+        String nextIdsSql = NEXT_PAGE.replace("SELECT *", "SELECT id");
+        List<Long> nextIds = jdbc.queryForList(nextIdsSql, Long.class, TARGET_USER, cursor);
+        List<Long> afterOldest = jdbc.queryForList(nextIdsSql, Long.class, TARGET_USER, oldest);
+        return new Result(label, first, firstRead, emptyRead, ids, nextIds, afterOldest);
     }
 
     private static String line(String label, String query, Map<String, Object> explain, long read, double ms) {
