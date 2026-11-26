@@ -11,6 +11,8 @@ export const options = {
   vus: 50,
   duration: __ENV.DURATION || '30s',
   summaryTrendStats: ['avg', 'p(95)', 'max'],
+  // 직접 실행에서도 200 이 아닌 응답이 하나라도 있으면 실패 종료 코드로 끝낸다(검사 실패만으로는 종료 코드가 안 바뀜)
+  thresholds: { checks: ['rate==1'] },
 };
 
 const url = (__ENV.BASE_URL || 'http://localhost:8080') + (__ENV.TARGET_PATH || '/api/menus/popular');

@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Date;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -313,7 +314,8 @@ class PopularMenuExperimentTest {
 
     private String get(String path) throws IOException, InterruptedException {
         HttpResponse<String> res = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
-                .header("Accept", "application/json").build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                .header("Accept", "application/json").timeout(Duration.ofSeconds(30)).build(), // 응답이 멈추면 무한 대기하지 않게
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         assertThat(res.statusCode()).as(path).isEqualTo(200);
         return res.body();
     }
