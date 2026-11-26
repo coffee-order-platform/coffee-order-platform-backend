@@ -186,6 +186,26 @@ class OrderApiTest {
     }
 
     @Test
+    void O5_잔액이_총액보다_1원_모자라도_INSUFFICIENT_POINT_이고_잔액_장바구니_주문이_그대로다() throws Exception {
+        // O6(딱 맞으면 성공)의 바로 아래 경계. 1원 부족인데도 주문이 통과하는 오차를 잡는다(비교가 <= 로 바뀌는 쪽은 O6가 잡는다).
+        // 기존 O5 는 2,500원 부족 사례라 이 경계가 비어 있었다(CodeRabbit PR #17 답글에서 확인)
+        User short1 = createUser("1원부족테스터", 4_499);
+        putInCart(short1, americano, 1); // 4,500원
+
+        MockHttpServletResponse res = order(short1.getId());
+
+        assertThat(res.getStatus()).isEqualTo(400);
+        assertThat(res.getContentAsString(UTF_8)).isEqualTo(INSUFFICIENT_POINT);
+        assertThat(balanceInDb(short1)).isEqualTo(4_499L);
+        assertThat(cartCount(short1)).isEqualTo(1);
+        // 행 수만으로는 수량이 바뀐 실패를 못 잡는다 → 담은 메뉴와 수량까지 그대로인지 본다(CodeRabbit PR #18)
+        assertThat(jdbc.queryForMap("SELECT menu_id, quantity FROM cart_items WHERE user_id = ?", short1.getId()))
+                .containsEntry("menu_id", americano).containsEntry("quantity", 1);
+        assertThat(orderCount(short1)).isZero();
+        assertThat(historyCount(short1)).isZero();
+    }
+
+    @Test
     void O6_잔액이_총액과_딱_같으면_주문되고_잔액은_0이다() throws Exception {
         User exact = createUser("딱맞는테스터", 4_500);
         putInCart(exact, americano, 1);
