@@ -173,6 +173,14 @@ class PopularMenuApiTest {
                 "{\"status\":500,\"code\":\"INTERNAL_SERVER_ERROR\",\"message\":\"서버 오류가 발생했습니다.\"}");
     }
 
+    @Test
+    void 실험용_DB_집계_API_는_평소에_꺼져_있어_404() throws Exception {
+        MockHttpServletResponse res = mockMvc.perform(get("/api/menus/popular/db")).andReturn().getResponse();
+
+        assertThat(res.getStatus()).isEqualTo(404);
+        assertThat(res.getContentAsString(UTF_8)).contains("\"code\":\"NOT_FOUND\"");
+    }
+
     // ---- 환불 차감 (11/20) ----
 
     @Test
