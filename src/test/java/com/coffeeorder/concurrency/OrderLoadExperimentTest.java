@@ -88,7 +88,7 @@ class OrderLoadExperimentTest {
     private static final Pattern K6_LINE = Pattern.compile("order_tps=([\\d.]+) order_avg=([\\d.]+)ms "
             + "order_p95=([\\d.]+)ms rejected_tps=([\\d.]+) rejected_p95=([\\d.]+)ms order_ok=(\\d+) "
             + "order_rejected=(\\d+) cart_conflict=(\\d+) charge_ok=(\\d+) refund_ok=(\\d+) unexpected=(\\d+) "
-            + "client_fail=(\\d+) reject_close=(\\d+)");
+            + "client_fail=(\\d+) order_unsent=(\\d+) reject_close=(\\d+)");
 
     /** mode 는 k6 스크립트의 MODE, accounts 는 쓰는 계좌 수(여러 기기는 계좌 하나에 VU 2명). */
     private record Scenario(String mode, String label, int accounts) {}
@@ -102,7 +102,7 @@ class OrderLoadExperimentTest {
 
     private record K6(double orderTps, double orderAvgMs, double orderP95Ms, double rejectedTps, double rejectedP95Ms,
             long orderOk, long orderRejected, long cartConflict, long chargeOk, long refundOk, long unexpected,
-            long clientFail, long rejectClose) {}
+            long clientFail, long orderUnsent, long rejectClose) {}
 
     @TestConfiguration
     static class FixedClock {
@@ -289,6 +289,7 @@ class OrderLoadExperimentTest {
         if (k6.cartConflict > 0) {
             problems.add(label + ": 발견 - 각자 계좌인데 장바구니 충돌(409) " + k6.cartConflict + "건");
         }
+        List<Long> cartLeft = new ArrayList<>(); // 기본 · 여러 기기 · 인기 메뉴에서 장바구니 1행이 남은 사용자
         for (int i = 0; i < ids.size(); i++) {
             long u = ids.get(i);
             String who = label + " 사용자 " + u;
@@ -317,10 +318,16 @@ class OrderLoadExperimentTest {
                 check(problems, balance == price - 1, who + ": 잔액 바닥 남은 잔액 " + balance + "(기대 " + (price - 1) + ")");
                 check(problems, cart == 1, who + ": 잔액 부족 뒤 남은 장바구니 " + cart + "행(기대 1)");
             } else {
-                // 마지막 주문 요청이 서버에 못 닿았으면(k6 연결 실패) 담긴 1행이 남을 수 있다
-                check(problems, cart == 0 || (k6.clientFail > 0 && cart == 1), who + ": 장바구니가 " + cart + "행 남음");
+                check(problems, cart <= 1, who + ": 장바구니가 " + cart + "행 남음");
+                if (cart == 1) {
+                    cartLeft.add(u);
+                }
             }
         }
+        // 1행이 정상으로 남는 경우는 그 사람의 마지막 주문 요청이 서버에 못 닿았을 때(주문 POST 연결 실패)뿐이다.
+        // k6 요약은 VU 별 상태를 못 주므로, 남은 사람 수를 주문 POST 연결 실패 건수 이하로만 허용한다(CodeRabbit PR #21)
+        check(problems, cartLeft.size() <= k6.orderUnsent, label + ": 장바구니가 남은 사용자 " + cartLeft
+                + " 가 주문 요청 연결 실패 " + k6.orderUnsent + "건보다 많음");
         String in = in(ids);
         check(problems, count("SELECT COUNT(*) FROM (SELECT order_id FROM point_histories WHERE user_id IN (" + in
                 + ") AND type = 'REFUND' GROUP BY order_id HAVING COUNT(*) > 1) t") == 0, label + ": 이중 환불");
@@ -395,9 +402,13 @@ class OrderLoadExperimentTest {
         }
         command.add("k6/order-load.js");
         Process process = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile()).start();
-        boolean finished = process.waitFor(K6_TIMEOUT_MINUTES, TimeUnit.MINUTES);
-        if (!finished) {
-            process.destroyForcibly();
+        boolean finished = false;
+        try {
+            finished = process.waitFor(K6_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+        } finally { // 시간 초과뿐 아니라 인터럽트 · 예외로 빠질 때도 k6 를 끝낸다. 안 그러면 정리 중에도 요청을 보낸다(CodeRabbit PR #21)
+            if (!finished) {
+                process.destroyForcibly().waitFor(10, TimeUnit.SECONDS);
+            }
         }
         String output = Files.readString(log, StandardCharsets.UTF_8);
         if (finished) { // 강제 종료 직후엔 Windows 가 파일을 아직 잡고 있을 수 있어, 남겨 두고 실패 이유를 먼저 보인다
@@ -414,7 +425,7 @@ class OrderLoadExperimentTest {
                 Double.parseDouble(m.group(4)), Double.parseDouble(m.group(5)), Long.parseLong(m.group(6)),
                 Long.parseLong(m.group(7)), Long.parseLong(m.group(8)), Long.parseLong(m.group(9)),
                 Long.parseLong(m.group(10)), Long.parseLong(m.group(11)), Long.parseLong(m.group(12)),
-                Long.parseLong(m.group(13)));
+                Long.parseLong(m.group(13)), Long.parseLong(m.group(14)));
         if (process.exitValue() == K6_THRESHOLD_FAILED) {
             assertThat(k6.unexpected).as("종료 코드 99 인데 예상 밖 응답이 0건\n" + output).isPositive();
             System.out.println(output); // 예상 밖 응답의 내용(k6 console.error)을 남긴다

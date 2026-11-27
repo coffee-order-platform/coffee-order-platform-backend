@@ -35,6 +35,7 @@ const refundOk = new Counter('refund_ok');
 const unexpected = new Counter('unexpected');
 // 요청이 서버에 닿기 전에 이 PC 의 연결 번호(포트)가 바닥나 실패한 건. 서버 문제가 아니라 따로 센다(11/27 경화님 결정)
 const clientFail = new Counter('client_fail');
+const orderUnsent = new Counter('order_unsent'); // client_fail 중 주문 POST 인 것(담기 뒤 주문이 못 나감)
 const rejectClose = new Counter('reject_close'); // 거절(400) 응답에 Connection: close 가 붙은 건(서버가 연결을 끊는지 확인)
 const orderOkMs = new Trend('order_ok_ms', true); // 주문 POST 만(담기 요청은 뺀다)
 const orderRejectedMs = new Trend('order_rejected_ms', true);
@@ -97,6 +98,9 @@ function orderFlow(userId, menuId) {
     // needAdd 는 false 그대로: 실패한 주문은 롤백돼 장바구니가 남는다. 또 담으면 수량이 쌓여 99 를 넘는다
     expect(true, res, '주문');
   } else {
+    if (isClientFail(res)) {
+      orderUnsent.add(1); // 담긴 장바구니가 남는다. 검증은 장바구니가 남은 사람 수를 이 건수 이하로만 허용한다
+    }
     expect(false, res, '주문');
   }
 }
@@ -154,6 +158,7 @@ export function handleSummary(data) {
     + `rejected_p95=${trend('order_rejected_ms', 'p(95)')}ms order_ok=${count('order_ok')} `
     + `order_rejected=${count('order_rejected')} cart_conflict=${count('cart_conflict')} charge_ok=${count('charge_ok')} `
     + `refund_ok=${count('refund_ok')} unexpected=${count('unexpected')} client_fail=${count('client_fail')} `
+    + `order_unsent=${count('order_unsent')} `
     + `reject_close=${count('reject_close')}\n`;
   const out = { stdout: line };
   if (__ENV.OUT) {
