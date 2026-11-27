@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.ToDoubleFunction;
 import java.util.regex.Matcher;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -44,7 +46,6 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -55,7 +56,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   인기 메뉴   : 기본과 같되 모두 아메리카노만
  * 마지막에 기본을 한 번 더 돌려 대조군으로 쓴다(처음과 15% 넘게 다르면 측정 환경이 흔들린 것).
  * 측정 회차마다 끝난 뒤 DB 와 Redis 를 대조한다: 잔액 = 시작 + 충전 − 사용 + 환불, 잔액 ≥ 0, 마지막 내역의 잔액 = 현재 잔액,
- * 사용 합 = 주문 금액 합, 이중 환불 없음, k6 가 센 성공 수 = DB 행 수, Redis 인기 메뉴 = 결제 상태 주문 수량 합(여러 기기 포함, 11/27 결정).
+ * 사용 합 = 주문 금액 합, 순차 환불에서 같은 주문 중복 환불 없음(같은 주문 동시 환불은 ConcurrencyRegressionTest R-8 이 본다), k6 가 센 성공 수 = DB 행 수, Redis 인기 메뉴 = 결제 상태 주문 수량 합(여러 기기 포함, 11/27 결정).
  * 장바구니 충돌(409)과 예상 밖 응답은 측정을 멈추지 않고 끝까지 센 뒤, 결과 파일을 쓰고 나서 테스트를 실패시킨다(11/27 결정).
  * 시계를 2098-01-15(서울)로 고정해 다른 테스트 데이터와 겹치지 않게 하고, 실험 사용자(이름 EXP2-)는 시작 · 끝에 통째로 지운다.
  * 테스트 설정이라 coffee_order_test 스키마와 Redis 1번 DB 를 쓴다(개발 DB 에 쓰지 않음). 평소 테스트에서는 건너뛴다.
@@ -159,15 +160,31 @@ class OrderLoadExperimentTest {
         // 장바구니 담기 교착은 재시도로 복구돼 응답에 드러나지 않는다. 서버 로그를 받아 회차마다 센다
         ListAppender<ILoggingEvent> sqlErrors = new ListAppender<>();
         sqlErrors.start();
-        ((Logger) LoggerFactory.getLogger(SQL_ERROR_LOGGER)).addAppender(sqlErrors);
+        Logger sqlErrorLogger = (Logger) LoggerFactory.getLogger(SQL_ERROR_LOGGER);
+        sqlErrorLogger.addAppender(sqlErrors);
+        try {
+            measure(report, problems, sqlErrors);
+        } finally { // 도중에 실패해도 같은 JVM 의 다음 테스트에 어펜더가 남지 않게(리뷰)
+            sqlErrorLogger.detachAppender(sqlErrors);
+        }
+        report.add(problems.isEmpty() ? "정합성: 모든 회차 통과" : "정합성 · 발견 " + problems.size() + "건:");
+        problems.forEach(p -> report.add("  - " + p));
+        report.forEach(System.out::println);
+        Files.write(Path.of("build", "experiment", "order-load-experiment.txt"), report);
+        assertThat(problems).as("정합성 문제 · 발견(위 결과 파일 참고)").isEmpty();
+    }
+
+    private void measure(List<String> report, List<String> problems, ListAppender<ILoggingEvent> sqlErrors)
+            throws IOException, InterruptedException {
         reset(SCENARIOS.getFirst(), users);
-        runK6(SCENARIOS.getFirst(), users, K6_LONG_WARMUP, null);
-        report.add("  측정 전 기본 상황 " + K6_LONG_WARMUP + " 예열(버림)");
+        sqlErrors.list.clear();
+        warmup(SCENARIOS.getFirst(), users, K6_LONG_WARMUP, report, problems, sqlErrors);
         List<Double> basicTps = new ArrayList<>();
         for (Scenario s : SCENARIOS) {
             List<Long> ids = users.subList(0, s.accounts);
             reset(s, ids);
-            runK6(s, ids, K6_WARMUP, null); // 동시 사용자 50명 상태(스레드 · 연결 풀 · JIT)를 데우고 버린다
+            sqlErrors.list.clear();
+            warmup(s, ids, K6_WARMUP, report, problems, sqlErrors); // 동시 사용자 50명 상태(스레드 · 연결 풀 · JIT)를 데우고 버린다
             List<K6> runs = new ArrayList<>();
             List<Long> deadlocks = new ArrayList<>();
             for (int r = 1; r <= RUNS; r++) {
@@ -178,7 +195,7 @@ class OrderLoadExperimentTest {
                         + (s.label.contains("대조") ? "-control" : "") + "-" + r + ".json");
                 problems.addAll(verify(s, ids, k6, label));
                 runs.add(k6);
-                deadlocks.add(sqlErrors.list.stream().filter(e -> e.getFormattedMessage().contains("ErrorCode: 1213")).count());
+                deadlocks.add(deadlocks(sqlErrors));
             }
             double tps = median(runs, K6::orderTps);
             if (s.mode.equals("basic")) {
@@ -205,12 +222,22 @@ class OrderLoadExperimentTest {
         report.add(String.format("대조군(기본 처음 ↔ 마지막) 변동 %.1f%% → %s", drift, drift <= CONTROL_DRIFT_PERCENT
                 ? "이 실행 안의 상황끼리 비교에만 유효(±" + CONTROL_DRIFT_PERCENT + "% 이내). 절대 수치는 실행마다 달라 인용하지 않는다"
                 : "비교 불가: 측정 환경이 흔들림. 이 실행의 수치는 인용하지 말고 다시 실행"));
-        report.add(problems.isEmpty() ? "정합성: 모든 회차 통과" : "정합성 · 발견 " + problems.size() + "건:");
-        problems.forEach(p -> report.add("  - " + p));
-        ((Logger) LoggerFactory.getLogger(SQL_ERROR_LOGGER)).detachAppender(sqlErrors);
-        report.forEach(System.out::println);
-        Files.write(Path.of("build", "experiment", "order-load-experiment.txt"), report);
-        assertThat(problems).as("정합성 문제 · 발견(위 결과 파일 참고)").isEmpty();
+    }
+
+    /** 예열은 수치를 버리지만, 장바구니 충돌 · 예상 밖 응답 · 교착은 남긴다(끝까지 재고 발견으로 표시, 리뷰). DB 정합성은 측정 회차만 본다. */
+    private void warmup(Scenario s, List<Long> ids, String duration, List<String> report, List<String> problems,
+            ListAppender<ILoggingEvent> sqlErrors) throws IOException, InterruptedException {
+        K6 k6 = runK6(s, ids, duration, null);
+        report.add(String.format("  예열 %s %s(버림) | 교착(재시도로 복구 포함) %d건 · 장바구니 충돌 %d건 · 예상 밖 %d건 · "
+                + "k6 연결 실패(서버 도달 전) %d건", s.label, duration, deadlocks(sqlErrors), k6.cartConflict,
+                k6.unexpected, k6.clientFail));
+        String label = s.label + " 예열 " + duration;
+        check(problems, k6.unexpected == 0, label + ": 예상 밖 응답 " + k6.unexpected + "건(콘솔의 k6 로그 참고)");
+        check(problems, k6.cartConflict == 0, label + ": 발견 - 각자 계좌인데 장바구니 충돌(409) " + k6.cartConflict + "건");
+    }
+
+    private static long deadlocks(ListAppender<ILoggingEvent> sqlErrors) {
+        return sqlErrors.list.stream().filter(e -> e.getFormattedMessage().contains("ErrorCode: 1213")).count();
     }
 
     // ---- 데이터 ----
@@ -290,7 +317,8 @@ class OrderLoadExperimentTest {
                 check(problems, balance == price - 1, who + ": 잔액 바닥 남은 잔액 " + balance + "(기대 " + (price - 1) + ")");
                 check(problems, cart == 1, who + ": 잔액 부족 뒤 남은 장바구니 " + cart + "행(기대 1)");
             } else {
-                check(problems, cart == 0, who + ": 장바구니가 " + cart + "행 남음");
+                // 마지막 주문 요청이 서버에 못 닿았으면(k6 연결 실패) 담긴 1행이 남을 수 있다
+                check(problems, cart == 0 || (k6.clientFail > 0 && cart == 1), who + ": 장바구니가 " + cart + "행 남음");
             }
         }
         String in = in(ids);
@@ -317,7 +345,7 @@ class OrderLoadExperimentTest {
                 });
         Map<Long, Long> cached = new HashMap<>();
         for (TypedTuple<String> t : Objects.requireNonNullElse(redis.opsForZSet().rangeWithScores(REDIS_KEY, 0, -1),
-                java.util.Set.<TypedTuple<String>>of())) {
+                Set.<TypedTuple<String>>of())) {
             if (t.getScore() != null && t.getScore() > 0) {
                 cached.put(Long.parseLong(t.getValue()), t.getScore().longValue());
             }
@@ -340,6 +368,7 @@ class OrderLoadExperimentTest {
         return jdbc.queryForObject(sql, Long.class, args);
     }
 
+    /** SQL IN 목록. DB 가 만든 사용자 id(long)만 받으므로 문자열로 이어 붙여도 안전하다. */
     private static String in(List<Long> ids) {
         return ids.stream().map(String::valueOf).collect(Collectors.joining(","));
     }

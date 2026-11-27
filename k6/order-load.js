@@ -79,6 +79,8 @@ function orderFlow(userId, menuId) {
     if (add.status !== 200) {
       return;
     }
+    // 담긴 뒤로는 주문이 성공할 때까지 다시 담지 않는다. 주문 요청이 서버에 못 닿아도(k6 연결 실패) 수량이 2 로 쌓이지 않게(리뷰)
+    needAdd = false;
   }
   const res = http.post(`${BASE}/api/users/${userId}/orders`, null, JSON_HEADERS);
   if (res.status === 201) {
@@ -92,7 +94,7 @@ function orderFlow(userId, menuId) {
     if ((res.headers.Connection || '').toLowerCase() === 'close') {
       rejectClose.add(1);
     }
-    needAdd = false; // 실패한 주문은 롤백돼 장바구니가 남는다. 또 담으면 수량이 쌓여 99 를 넘는다
+    // needAdd 는 false 그대로: 실패한 주문은 롤백돼 장바구니가 남는다. 또 담으면 수량이 쌓여 99 를 넘는다
     expect(true, res, '주문');
   } else {
     expect(false, res, '주문');
